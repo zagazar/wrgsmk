@@ -24,22 +24,6 @@ window.WRGSMK_HORIZONTAL_SCROLL = {
     scrollTriggerInstance: null
   },
 
-  // Responsive Percent-Konfiguration
-getResponsivePercents: function() {
-  const w = window.innerWidth;
-  const container = document.querySelector(this.SELECTORS.CONTAINER);
-  const scrollContent = document.querySelector(this.SELECTORS.HORIZONTAL_SCROLL);
-  if (!container || !scrollContent) return { START_PERCENT: 0, END_PERCENT: -100 };
-
-  const containerWidth = container.offsetWidth;
-  const contentWidth = scrollContent.offsetWidth;
-
-  // Beispiel: Endwert so dass Content komplett sichtbar wird
-  const END_PERCENT = ((contentWidth - containerWidth) / contentWidth) * -100;
-  // Startwert evtl. immer 0
-  return { START_PERCENT: 0, END_PERCENT };
-},
-
   setScrollContentWidth: function() {
     const scrollContent = document.querySelector(this.SELECTORS.HORIZONTAL_SCROLL);
     const images = document.querySelectorAll(this.SELECTORS.IMAGES);
@@ -62,6 +46,23 @@ getResponsivePercents: function() {
     
     scrollContent.style.width = `${totalWidth}px`;
   },
+
+  
+  // Responsive Percent-Konfiguration
+getResponsivePercents: function() {
+  const w = window.innerWidth;
+  const container = document.querySelector(this.SELECTORS.CONTAINER);
+  const scrollContent = document.querySelector(this.SELECTORS.HORIZONTAL_SCROLL);
+  if (!container || !scrollContent) return { START_PERCENT: 0, END_PERCENT: -100 };
+
+  const containerWidth = container.offsetWidth;
+  const contentWidth = scrollContent.offsetWidth;
+
+  // Beispiel: Endwert so dass Content komplett sichtbar wird
+  const END_PERCENT = ((contentWidth - containerWidth) / contentWidth) * -100;
+  // Startwert evtl. immer 0
+  return { START_PERCENT: 0, END_PERCENT };
+},
 
   setupResize: function() {
     window.addEventListener('resize', () => {
