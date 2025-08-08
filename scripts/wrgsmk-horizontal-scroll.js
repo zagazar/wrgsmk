@@ -13,17 +13,30 @@ window.WRGSMK_HORIZONTAL_SCROLL = {
   },
 
   CONFIG: {
-    START_PERCENT: 33,
-    END_PERCENT: -50,
-    TRIGGER_START: "top 8%",
     IMAGE_FALLBACK_WIDTH: 300,
     IMAGE_SPACING: 20,
+    TRIGGER_START: "top 8%",
     RESIZE_DEBOUNCE: 150
   },
 
   state: {
     resizeTimeout: null,
     scrollTriggerInstance: null
+  },
+
+  // Responsive Percent-Konfiguration
+  getResponsivePercents: function() {
+    const w = window.innerWidth;
+    if (w < 600) {
+      // Mobile
+      return { START_PERCENT: 10, END_PERCENT: -80 };
+    } else if (w < 1200) {
+      // Tablet
+      return { START_PERCENT: 25, END_PERCENT: -60 };
+    } else {
+      // Desktop
+      return { START_PERCENT: 33, END_PERCENT: -50 };
+    }
   },
 
   setScrollContentWidth: function() {
@@ -53,8 +66,7 @@ window.WRGSMK_HORIZONTAL_SCROLL = {
     window.addEventListener('resize', () => {
       clearTimeout(this.state.resizeTimeout);
       this.state.resizeTimeout = setTimeout(() => {
-        this.setScrollContentWidth();
-        ScrollTrigger.refresh();
+        this.init(); // Instanz wird im init neu erstellt!
       }, this.CONFIG.RESIZE_DEBOUNCE);
     });
   },
@@ -65,11 +77,18 @@ window.WRGSMK_HORIZONTAL_SCROLL = {
     const imgGrid = document.querySelector(this.SELECTORS.IMG_GRID);
     
     if (!scrollContent || !container) return;
-    
+
+    const percents = this.getResponsivePercents();
+
+    // Falls bereits eine Instanz existiert, vorher zerstören!
+    if (this.state.scrollTriggerInstance) {
+      this.state.scrollTriggerInstance.scrollTrigger.kill();
+    }
+
     this.state.scrollTriggerInstance = gsap.fromTo(scrollContent,
-      { xPercent: this.CONFIG.START_PERCENT },
+      { xPercent: percents.START_PERCENT },
       {
-        xPercent: this.CONFIG.END_PERCENT,
+        xPercent: percents.END_PERCENT,
         ease: "none",
         scrollTrigger: {
           trigger: container,
@@ -82,7 +101,11 @@ window.WRGSMK_HORIZONTAL_SCROLL = {
     );
 
     this.setScrollContentWidth();
-    this.setupResize();
+    // setupResize nur einmal aufrufen!
+    if (!this._resizeSetup) {
+      this.setupResize();
+      this._resizeSetup = true;
+    }
   },
 
   destroy: function() {
