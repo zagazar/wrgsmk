@@ -13,9 +13,6 @@
  */
 
 const HOME_SELECTORS = {
-  FLYIN: '.traya-flyin',
-  FANCY_HEADLINE: '.fancy-section-headline',
-  FULLSCREEN: '.fullscreen-section',
   CONTACT_FORM: '.contact-form',
   CONTACT_TITLE: '.contact-form__head h2',
   CONTACT_SUBTITLE: '.contact-form__head h3',
@@ -32,79 +29,11 @@ const HOME_CONFIG = {
     WORK_END: "top 20%",
     CONTENT_START: "top 60%",
     CONTENT_END: "top 30%",
-    FLYIN_START: "top 85%",
-    FLYIN_END: "top 50%",
     HEADLINE_START: "bottom 85%"
   }
 };
 
 const HOME_MODULES = {
-  
-  setupHoverAnimations: (SELECTORS, CORE, UTILS) => {
-    const fancyHeadlines = UTILS.getElements(SELECTORS.FANCY_HEADLINE);
-    
-    fancyHeadlines.forEach(section => {
-      const arrow = section.querySelector('.arrow--fancy-section-headline');
-      if (!arrow) return;
-      
-      UTILS.addManagedEventListener(section, 'mouseenter', () => {
-        gsap.to(arrow, {
-          rotation: '+=6',
-          x: '-=4',
-          duration: 0.266,
-          ease: 'hover266',
-          transformOrigin: 'center center',
-          overwrite: true
-        });
-      });
-      
-      UTILS.addManagedEventListener(section, 'mouseleave', () => {
-        gsap.to(arrow, {
-          rotation: '-=6',
-          x: '+=4',
-          duration: 0.266,
-          transformOrigin: 'center center',
-          ease: 'hover266',
-          overwrite: true
-        });
-      });
-    });
-  },
-
-  setupSectionPinning: (SELECTORS, UTILS) => {
-    const fancyHeadline = UTILS.getElement(SELECTORS.FANCY_HEADLINE);
-    const fullscreenSection = UTILS.getElement(SELECTORS.FULLSCREEN);
-    
-    if (fancyHeadline && fullscreenSection) {
-      ScrollTrigger.create({
-        trigger: fancyHeadline,
-        start: HOME_CONFIG.SCROLL_TRIGGERS.HEADLINE_START,
-        endTrigger: fullscreenSection,
-        end: "+=500",
-        pin: false
-      });
-    }
-  },
-
-  setupFlyInAnimation: (SELECTORS, UTILS) => {
-    const flyInElement = UTILS.getElement(SELECTORS.FLYIN);
-    if (!flyInElement) return;
-    
-    gsap.fromTo(flyInElement, 
-      { yPercent: -100 },
-      {
-        yPercent: 0,
-        ease: "circ.out",
-        scrollTrigger: {
-          trigger: flyInElement,
-          start: HOME_CONFIG.SCROLL_TRIGGERS.FLYIN_START,
-          end: HOME_CONFIG.SCROLL_TRIGGERS.FLYIN_END,
-          scrub: 1,
-          toggleActions: "play none none reverse"
-        }
-      }
-    );
-  },
 
   setupContactAnimations: (SELECTORS, CORE, UTILS, STATE) => {
     const workSection = UTILS.getElement(SELECTORS.CONTACT_FORM);
@@ -211,9 +140,6 @@ const HOME_MODULES = {
 
 // Die Initialisierung übergibt UTILS als zweiten Parameter!
 function initHomePage(SELECTORS, CORE, UTILS, STATE) {
-  HOME_MODULES.setupHoverAnimations(SELECTORS, CORE, UTILS);
-  HOME_MODULES.setupSectionPinning(SELECTORS, UTILS);
-  HOME_MODULES.setupFlyInAnimation(SELECTORS, UTILS);
   HOME_MODULES.setupContactAnimations(SELECTORS, CORE, UTILS, STATE);
   HOME_MODULES.setupScrollIndicator(SELECTORS, CORE, UTILS, STATE);
 }
