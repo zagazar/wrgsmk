@@ -29,7 +29,7 @@ window.WRGSMK_HORIZONTAL_SCROLL = {
     const w = window.innerWidth;
     if (w < 600) {
       // Mobile
-      return { START_PERCENT: 10, END_PERCENT: -80 };
+      return { START_PERCENT: 0, END_PERCENT: -80 };
     } else if (w < 1200) {
       // Tablet
       return { START_PERCENT: 25, END_PERCENT: -60 };
