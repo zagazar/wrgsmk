@@ -25,19 +25,20 @@ window.WRGSMK_HORIZONTAL_SCROLL = {
   },
 
   // Responsive Percent-Konfiguration
-  getResponsivePercents: function() {
-    const w = window.innerWidth;
-    if (w < 600) {
-      // Mobile
-      return { START_PERCENT: -50, END_PERCENT: -80 };
-    } else if (w < 1200) {
-      // Tablet
-      return { START_PERCENT: 25, END_PERCENT: -60 };
-    } else {
-      // Desktop
-      return { START_PERCENT: 33, END_PERCENT: -50 };
-    }
-  },
+getResponsivePercents: function() {
+  const w = window.innerWidth;
+  const container = document.querySelector(this.SELECTORS.CONTAINER);
+  const scrollContent = document.querySelector(this.SELECTORS.HORIZONTAL_SCROLL);
+  if (!container || !scrollContent) return { START_PERCENT: 0, END_PERCENT: -100 };
+
+  const containerWidth = container.offsetWidth;
+  const contentWidth = scrollContent.offsetWidth;
+
+  // Beispiel: Endwert so dass Content komplett sichtbar wird
+  const END_PERCENT = ((contentWidth - containerWidth) / contentWidth) * -100;
+  // Startwert evtl. immer 0
+  return { START_PERCENT: 0, END_PERCENT };
+},
 
   setScrollContentWidth: function() {
     const scrollContent = document.querySelector(this.SELECTORS.HORIZONTAL_SCROLL);
@@ -95,8 +96,7 @@ window.WRGSMK_HORIZONTAL_SCROLL = {
           pin: true,
           start: this.CONFIG.TRIGGER_START,
           scrub: 1,
-          end: () => `+=${imgGrid?.offsetWidth * 0.99 || window.innerWidth}`
-        }
+          end: () => `+=${scrollContent.offsetWidth - container.offsetWidth}`        }
       }
     );
 
