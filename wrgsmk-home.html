@@ -1,10 +1,12 @@
 <!-- To copy into Webflow -->
 
-<script src="./scripts/wrgsmk-core.js"></script>
-<script src="./scripts/wrgsmk-preloader.js"></script>
-<script src="./scripts/wrgsmk-horizontal-scroll.js"></script>
-<script src="./scripts/wrgsmk-img-grid.js"></script>
-<script src="./scripts/wrgsmk-fancy-vert.js"></script>
+<!-- WRGSMK Core und Module via jsDelivr laden -->
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk/scripts/wrgsmk-core.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk/scripts/wrgsmk-preloader.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk/scripts/wrgsmk-horizontal-scroll.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk/scripts/wrgsmk-img-grid.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk/scripts/wrgsmk-fancy-vert.js"></script>
+
 <script>
 /**
  * WRGSMK Home Page JavaScript
@@ -69,7 +71,7 @@ const HOME_MODULES = {
     });
   },
 
-  setupSectionPinning: (SELECTORS) => {
+  setupSectionPinning: (SELECTORS, UTILS) => {
     const fancyHeadline = UTILS.getElement(SELECTORS.FANCY_HEADLINE);
     const fullscreenSection = UTILS.getElement(SELECTORS.FULLSCREEN);
     
@@ -84,7 +86,7 @@ const HOME_MODULES = {
     }
   },
 
-  setupFlyInAnimation: (SELECTORS) => {
+  setupFlyInAnimation: (SELECTORS, UTILS) => {
     const flyInElement = UTILS.getElement(SELECTORS.FLYIN);
     if (!flyInElement) return;
     
@@ -207,10 +209,11 @@ const HOME_MODULES = {
   }
 };
 
+// Die Initialisierung übergibt UTILS als zweiten Parameter!
 function initHomePage(SELECTORS, CORE, UTILS, STATE) {
   HOME_MODULES.setupHoverAnimations(SELECTORS, CORE, UTILS);
-  HOME_MODULES.setupSectionPinning(SELECTORS);
-  HOME_MODULES.setupFlyInAnimation(SELECTORS);
+  HOME_MODULES.setupSectionPinning(SELECTORS, UTILS);
+  HOME_MODULES.setupFlyInAnimation(SELECTORS, UTILS);
   HOME_MODULES.setupContactAnimations(SELECTORS, CORE, UTILS, STATE);
   HOME_MODULES.setupScrollIndicator(SELECTORS, CORE, UTILS, STATE);
 }
