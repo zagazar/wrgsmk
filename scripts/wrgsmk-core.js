@@ -9,7 +9,7 @@ const WRGSMK_CONFIG = {
   // Custom Easings
   CUSTOM_EASINGS: {
     naturalInOut: "M0,0 C0.19,0.03 0.32,0.27 0.5,0.5 0.68,0.73 0.83,0.97 1,1",
-    bounce.inOut: "M0,0 C0.2,0 0.3,0.3 0.5,0.6 0.7,0.9 0.8,1.0 1.0,1.0",
+    lightFall: "M0,0 C0.2,0 0.3,0.3 0.5,0.6 0.7,0.9 0.8,1.0 1.0,1.0",
     hover266: "M0,0 C0.83,0 0.17,1 1,1"
   },
 
