@@ -1,0 +1,84 @@
+name: Purge jsDelivr cache (scripts/*.js)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "scripts/*.js"
+      - "scripts/**/*.js"
+  workflow_dispatch: {}
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed JS files (push) or all (manual)
+        id: files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            mapfile -t FILES < <(find scripts -type f -name '*.js' | sort)
+          else
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+            mapfile -t FILES < <(git diff --name-only "$BEFORE" "$AFTER" \
+              | grep -E '^scripts\/.*\.js$' || true)
+          fi
+
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "files=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          printf 'files<<EOF\n' >> "$GITHUB_OUTPUT"
+          printf '%s\n' "${FILES[@]}" >> "$GITHUB_OUTPUT"
+          printf 'EOF\n' >> "$GITHUB_OUTPUT"
+
+      - name: Purge jsDelivr caches for affected files
+        if: steps.files.outputs.files != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER="${GITHUB_REPOSITORY%/*}"
+          REPO="${GITHUB_REPOSITORY#*/}"
+
+          while IFS= read -r FILEPATH; do
+            echo "Purging: $FILEPATH"
+            URLS=(
+              "https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${FILEPATH}"
+              "https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@main/${FILEPATH}"
+              "https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@latest/${FILEPATH}"
+            )
+            for u in "${URLS[@]}"; do
+              PURGE="${u/https:\/\/cdn.jsdelivr.net/https:\/\/purge.jsdelivr.net}"
+              echo "→ $PURGE"
+              curl -fsSL "$PURGE" || true
+            done
+          done <<< "${{ steps.files.outputs.files }}"
+
+      - name: Warm edge caches (optional)
+        if: steps.files.outputs.files != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER="${GITHUB_REPOSITORY%/*}"
+          REPO="${GITHUB_REPOSITORY#*/}"
+
+          while IFS= read -r FILEPATH; do
+            URLS=(
+              "https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${FILEPATH}"
+              "https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@main/${FILEPATH}"
+              "https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@latest/${FILEPATH}"
+            )
+            for u in "${URLS[@]}"; do
+              echo "Warm: $u"
+              curl -I -sS "$u" >/dev/null || true
+            done
+          done <<< "${{ steps.files.outputs.files }}"
