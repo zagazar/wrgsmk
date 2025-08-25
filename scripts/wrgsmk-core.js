@@ -14,8 +14,8 @@ const WRGSMK_CONFIG = {
   },
 
   SCROLL_SMOOTH: {
-    SMOOTH: 0.666,
-    TOUCH: 0.1
+    SMOOTH: 0.466,
+    TOUCH: 0.05
   }
 };
 
