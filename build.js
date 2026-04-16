@@ -20,6 +20,10 @@ const bundles = [
     entryPoints: ['src/pages/shop/index.js'],
     outfile: 'dist/wrgsmk-shop.min.js',
   },
+  {
+    entryPoints: ['src/pages/photography/index.js'],
+    outfile: 'dist/wrgsmk-photography.min.js',
+  },
 ];
 
 const sharedOptions = {
