@@ -24,6 +24,10 @@ const bundles = [
     entryPoints: ['src/pages/photography/index.js'],
     outfile: 'dist/wrgsmk-photography.min.js',
   },
+  {
+    entryPoints: ['src/pages/auftragsarbeiten/index.js'],
+    outfile: 'dist/wrgsmk-auftragsarbeiten.min.js',
+  },
 ];
 
 const sharedOptions = {
