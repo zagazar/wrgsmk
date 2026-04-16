@@ -1,0 +1,15 @@
+{
+  "name": "wrgsmk",
+  "version": "1.0.0",
+  "description": "Custom scripts for wuergsamkeiten.com — modular, versioned, served via jsDelivr",
+  "author": "zagazar",
+  "license": "UNLICENSED",
+  "private": false,
+  "scripts": {
+    "build": "node build.js",
+    "build:watch": "node build.js --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

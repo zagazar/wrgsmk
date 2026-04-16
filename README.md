@@ -1,56 +1,67 @@
-# WRGSMK Webflow Integration Guide
+# WRGSMK — Custom Scripts for wuergsamkeiten.com
 
-## Module Integration Order
+Modular, versioned JavaScript for the Webflow portfolio site. Served via [jsDelivr CDN](https://www.jsdelivr.com/).
 
-To properly integrate all WRGSMK modules in your Webflow project, add the following script tags in this exact order:
+## Structure
 
-### 1. Required External Libraries (in <head>)
-```html
-<!-- GSAP Core -->
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollSmoother.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/CustomEase.min.js"></script>
+```
+src/
+  core/               ← Loaded on every page
+    lenis-init.js       Lenis smooth scroll + GSAP ticker
+    parallax.js         data-speed parallax
+    context-guard.js    Right-click guard
+  pages/
+    home/             ← / only
+      horizontal-scroll.js
+      circle-text.js
+    illustration/     ← /illustration only
+      mouse-pan.js
+      rotating-words.js
+    shop/             ← /shop only
+      shop-effects.js
+dist/                 ← Minified bundles (built by esbuild)
+  wrgsmk-core.min.js
+  wrgsmk-home.min.js
+  wrgsmk-illustration.min.js
+  wrgsmk-shop.min.js
 ```
 
-### 2. WRGSMK Module Scripts (before closing </body> tag)
-```html
-<!-- Core Framework (MUST be first) -->
-<script src="[PATH]/wrgsmk-core.js"></script>
+## Setup
 
-<!-- Feature Modules (order doesn't matter) -->
-<script src="[PATH]/wrgsmk-preloader.js"></script>
-<script src="[PATH]/wrgsmk-horizontal-scroll.js"></script>
-<script src="[PATH]/wrgsmk-img-grid.js"></script>
-<script src="[PATH]/wrgsmk-fancy-vert.js"></script>
-<script src="[PATH]/wrgsmk-mouse-follower.js"></script>
+```bash
+npm install
+npm run build
 ```
 
-## Mouse Follower HTML Structure
+## Webflow Integration
 
-For the mouse follower module to work, add this HTML structure to your Webflow elements:
-
+Add to **Site-wide Custom Code (Before `</body>`):**
 ```html
-<!-- Add this class to your masonry image links -->
-<a href="#" class="masonry--image--link" data-page-name="Project Name">
-  <!-- Your image content -->
-  
-  <!-- Add the mouse follower element -->
-  <div class="mouse-follower">
-    <!-- Text will be dynamically set from data-page-name -->
-  </div>
-</a>
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.0.0/dist/wrgsmk-core.min.js" defer></script>
+```
 
+Add to **Page-specific Custom Code (Before `</body>`):**
+```html
+<!-- Home -->
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.0.0/dist/wrgsmk-home.min.js" defer></script>
 
-## Automatic Initialization
+<!-- Illustration -->
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.0.0/dist/wrgsmk-illustration.min.js" defer></script>
 
-All modules are now automatically initialized when `WRGSMK_INIT()` is called. No manual initialization needed for individual modules.
+<!-- Shop -->
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.0.0/dist/wrgsmk-shop.min.js" defer></script>
+```
 
-## Data Attributes
+## External Dependencies (loaded by Webflow, not bundled)
 
-The mouse follower module supports these data attributes:
+- GSAP 3.14.2 + ScrollTrigger + SplitText (Webflow CDN)
+- Lenis 1.2.3 (jsDelivr)
+- CircleType 2.3.1 (jsDelivr, home only)
 
-- `data-page-name` - Primary text source
-- `data-link-text` - Fallback text source  
-- If neither is provided, it uses the link's text content
-- Final fallback: "View Project"
+## Releasing
+
+1. `npm run build`
+2. Commit dist/ changes
+3. `git tag v1.x.x && git push origin v1.x.x`
+4. jsDelivr picks up the new tag automatically
+5. Update version number in Webflow script tags
