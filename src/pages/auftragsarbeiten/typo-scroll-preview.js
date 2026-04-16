@@ -10,7 +10,7 @@
  * - .wrgsmk-comission_list   (project list, gets cloned N-1 times)
  * - .wrgsmk-comission_item   (each project entry)
  * - .wrgsmk-comission_img    (image inside each item)
- * - .comission-img-container (preview container, moved to body)
+ * - .comission-img-container (preview container, moved to body behind section)
  * - .comission_img            (the preview image element)
  *
  * Optional data attribute on .wrgsmk-comission:
@@ -31,8 +31,9 @@ export function initTypoScrollPreview() {
   const REPEAT_COUNT = parseInt(section.dataset.comissionRepeats || '3', 10);
   const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-  // Move preview container to <body> so position:fixed works
-  // (ScrollTrigger pin applies transforms that break fixed positioning inside)
+  // Move preview container to body — it uses position:fixed and sits
+  // BEHIND the pinned section (lower z-index). The section's titles
+  // use mix-blend-mode:difference to interact with the image visually.
   document.body.appendChild(imgContainer);
 
   // Clone the list N-1 times for repeated scroll effect
@@ -90,7 +91,16 @@ export function initTypoScrollPreview() {
       if (itemImg.srcset) previewImg.srcset = itemImg.srcset;
       if (itemImg.sizes) previewImg.sizes = itemImg.sizes;
     }
-    imgContainer.classList.add('is-revealed');
+
+    // Brief close→reopen when switching, or just reveal on first hover
+    if (imgContainer.classList.contains('is-revealed')) {
+      imgContainer.classList.remove('is-revealed');
+      setTimeout(() => {
+        imgContainer.classList.add('is-revealed');
+      }, 120);
+    } else {
+      imgContainer.classList.add('is-revealed');
+    }
   }
 
   function deactivate() {
