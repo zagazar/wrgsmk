@@ -1,11 +1,10 @@
-name: Purge jsDelivr cache (scripts/*.js)
+name: Purge jsDelivr cache (dist/*.js)
 
 on:
   push:
     branches: [ main ]
     paths:
-      - "scripts/*.js"
-      - "scripts/**/*.js"
+      - "dist/*.js"
   workflow_dispatch: {}
 
 jobs:
@@ -24,12 +23,12 @@ jobs:
           set -euo pipefail
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            mapfile -t FILES < <(find scripts -type f -name '*.js' | sort)
+            mapfile -t FILES < <(find dist -type f -name '*.js' | sort)
           else
             BEFORE="${{ github.event.before }}"
             AFTER="${{ github.sha }}"
             mapfile -t FILES < <(git diff --name-only "$BEFORE" "$AFTER" \
-              | grep -E '^scripts\/.*\.js$' || true)
+              | grep -E '^dist\/.*\.js$' || true)
           fi
 
           if [ ${#FILES[@]} -eq 0 ]; then
