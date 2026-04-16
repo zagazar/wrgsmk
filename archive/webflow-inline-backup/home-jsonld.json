@@ -1,0 +1,52 @@
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Wuergsamkeiten | Start",
+  "description": "Ob freie Projekte oder Auftragsarbeiten – ich entwickle individuelle visuelle Konzepte mit Haltung, Gespür und gestalterischem Anspruch. Ich glaube an die Kraft von Bildern, die etwas berühren. An Design, das nicht nur kommuniziert, sondern bleibt.",
+  "url": "/",
+  "inLanguage": "de-DE",
+  "about": {
+    "@type": "Person",
+    "name": "Victoria",
+    "jobTitle": "Visuelle Gestalterin",
+    "description": "Entwicklung individueller visueller Konzepte mit Haltung, Gespür und gestalterischem Anspruch",
+    "email": "post@wuergsamkeiten.com",
+    "image": "https://cdn.prod.website-files.com/67e1cc5e7360852b39a22051/6861556f2551b2561ce3871d_wrgsmk-portrait--hocke.png",
+    "sameAs": [
+      "https://www.instagram.com/wuergsamkeiten",
+      "https://www.instagram.com/wuerxamkeiten_/"
+    ],
+    "knowsAbout": [
+      "Illustration",
+      "Photographie",
+      "Design",
+      "Animation"
+    ],
+    "hasOccupation": {
+      "@type": "Occupation",
+      "name": "Visuelle Gestalterin",
+      "skills": "Illustration, Fotografie, Design, Animation"
+    }
+  },
+  "mainEntity": {
+    "@type": "ProfessionalService",
+    "name": "Wuergsamkeiten",
+    "description": "Visuelle Konzepte, Illustration, Fotografie, Design und Animation",
+    "url": "/",
+    "email": "post@wuergsamkeiten.com",
+    "logo": "https://cdn.prod.website-files.com/67e1cc5e7360852b39a22051/6861a0e2948480e66085dbd2_wrgsmk-logo--lila.svg",
+    "image": "https://cdn.prod.website-files.com/67e1cc5e7360852b39a22051/67e1e6ff2264b653ede9a955_IMG_7887.GIF",
+    "sameAs": [
+      "https://www.instagram.com/wuergsamkeiten",
+      "https://www.instagram.com/wuerxamkeiten_/"
+    ],
+    "areaServed": "DE",
+    "serviceType": [
+      "Illustration",
+      "Fotografie",
+      "Design",
+      "Animation",
+      "Auftragsarbeiten"
+    ]
+  }
+}
