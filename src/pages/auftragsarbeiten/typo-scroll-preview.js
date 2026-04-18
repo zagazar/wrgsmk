@@ -91,6 +91,14 @@ export function initTypoScrollPreview() {
   // --- Preview image logic ---
   let activeItem = null;
 
+  function swapImage(itemImg) {
+    if (!itemImg) return;
+    previewImg.src = itemImg.src;
+    previewImg.alt = itemImg.alt || '';
+    if (itemImg.srcset) previewImg.srcset = itemImg.srcset;
+    if (itemImg.sizes) previewImg.sizes = itemImg.sizes;
+  }
+
   function activate(item) {
     if (item === activeItem) return;
     if (activeItem) activeItem.classList.remove('is-active');
@@ -98,22 +106,28 @@ export function initTypoScrollPreview() {
     activeItem = item;
     item.classList.add('is-active');
 
-    // Swap preview image to match hovered/active item
     const itemImg = item.querySelector('.wrgsmk-comission_img');
-    if (itemImg) {
-      previewImg.src = itemImg.src;
-      previewImg.alt = itemImg.alt || '';
-      if (itemImg.srcset) previewImg.srcset = itemImg.srcset;
-      if (itemImg.sizes) previewImg.sizes = itemImg.sizes;
-    }
 
-    // Brief close→reopen when switching, or just reveal on first hover
     if (imgContainer.classList.contains('is-revealed')) {
-      imgContainer.classList.remove('is-revealed');
-      setTimeout(() => {
-        imgContainer.classList.add('is-revealed');
-      }, 120);
+      // Already revealed — quick fade on the image for the swap
+      gsap.killTweensOf(previewImg);
+      gsap.to(previewImg, {
+        opacity: 0,
+        duration: 0.25,
+        ease: 'power2.in',
+        onComplete: () => {
+          swapImage(itemImg);
+          gsap.to(previewImg, {
+            opacity: 1,
+            duration: 0.35,
+            ease: 'power2.out',
+          });
+        },
+      });
     } else {
+      // First reveal — set src then trigger the container clip-path reveal
+      swapImage(itemImg);
+      gsap.set(previewImg, { opacity: 1 });
       imgContainer.classList.add('is-revealed');
     }
   }
@@ -121,6 +135,8 @@ export function initTypoScrollPreview() {
   function deactivate() {
     if (activeItem) activeItem.classList.remove('is-active');
     activeItem = null;
+    gsap.killTweensOf(previewImg);
+    gsap.set(previewImg, { opacity: 1 });
     imgContainer.classList.remove('is-revealed');
   }
 
