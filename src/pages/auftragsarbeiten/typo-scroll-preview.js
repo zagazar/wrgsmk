@@ -1,6 +1,10 @@
 /**
- * Typo Scroll Preview — Pinned commission section with repeating project list
- * and hover/scroll-activated image preview with clip-path animation.
+ * Typo Scroll Preview — Pinned commission section with repeating project list.
+ *
+ * Follows the Osmo/Dashly "Big Typo Scroll Preview" pattern: each project has
+ * its own fixed-position preview image that stacks at viewport center. Only
+ * the active one is visible. Switching items crossfades via simultaneous
+ * clip-path + opacity transitions (CSS).
  *
  * Expects globals: gsap, ScrollTrigger
  *
@@ -9,9 +13,12 @@
  * - .wrgsmk-comission_wrap   (inner wrapper, gets translated)
  * - .wrgsmk-comission_list   (project list, gets cloned N-1 times)
  * - .wrgsmk-comission_item   (each project entry)
- * - .wrgsmk-comission_img    (image inside each item)
- * - .comission-img-container (preview container, moved to body behind section)
- * - .comission_img            (the preview image element)
+ * - .wrgsmk-comission_img    (image inside each item — source for preview)
+ * - .comission-img-container (the OLD single preview — removed, no longer used)
+ *
+ * Previews created by this module (added to <body>):
+ * - .typo-preview            (one per project, fixed-position, clip-path animated)
+ *   - .is-active              (state class)
  *
  * Optional data attribute on .wrgsmk-comission:
  * - data-comission-repeats="3"  (how many times the list repeats, default 3)
@@ -24,31 +31,30 @@ export function initTypoScrollPreview() {
 
   const wrap = section.querySelector('.wrgsmk-comission_wrap');
   const list = section.querySelector('.wrgsmk-comission_list');
-  const imgContainer = section.querySelector('.comission-img-container');
-  const previewImg = imgContainer?.querySelector('.comission_img');
-  if (!wrap || !list || !imgContainer || !previewImg) return;
+  if (!wrap || !list) return;
 
   const REPEAT_COUNT = parseInt(section.dataset.comissionRepeats || '3', 10);
   const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-  // Move preview container to body — it uses position:fixed and sits
-  // BEHIND the pinned section (lower z-index). The section's titles
-  // use mix-blend-mode:difference to interact with the image visually.
-  document.body.appendChild(imgContainer);
+  // Remove the old single-preview container (no longer used)
+  const oldContainer = section.querySelector('.comission-img-container');
+  if (oldContainer) oldContainer.remove();
 
-  // Ensure stacking: pinned section/wrap (z-index 2) above preview (z-index 1).
-  // Both default to z-index: auto, so they stack by DOM order — and the
-  // container ends up last in body, covering the section. Fix with explicit z-indexes.
-  section.style.position = 'relative';
-  section.style.zIndex = '2';
-  wrap.style.position = 'relative';
-  wrap.style.zIndex = '2';
-  imgContainer.style.zIndex = '1';
-
-  // ScrollTrigger's pin-spacer wraps the section — propagate z-index once ST is set up
-  requestAnimationFrame(() => {
-    const pinSpacer = section.closest('.pin-spacer');
-    if (pinSpacer) pinSpacer.style.zIndex = '2';
+  // Create one fixed-position preview per ORIGINAL item (before cloning).
+  const originalItems = list.querySelectorAll('.wrgsmk-comission_item');
+  const previews = [];
+  originalItems.forEach((item) => {
+    const itemImg = item.querySelector('.wrgsmk-comission_img');
+    if (!itemImg) {
+      previews.push(null);
+      return;
+    }
+    const preview = itemImg.cloneNode(true);
+    preview.classList.remove('wrgsmk-comission_img');
+    preview.classList.add('typo-preview');
+    preview.removeAttribute('aria-hidden');
+    document.body.appendChild(preview);
+    previews.push(preview);
   });
 
   // Clone the list N-1 times for repeated scroll effect
@@ -62,6 +68,16 @@ export function initTypoScrollPreview() {
 
   // Section must clip the overflowing list content
   section.style.overflow = 'hidden';
+
+  // Ensure titles render above the body-level previews
+  section.style.position = 'relative';
+  section.style.zIndex = '2';
+  wrap.style.position = 'relative';
+  wrap.style.zIndex = '2';
+  requestAnimationFrame(() => {
+    const pinSpacer = section.closest('.pin-spacer');
+    if (pinSpacer) pinSpacer.style.zIndex = '2';
+  });
 
   // Scroll distance = total list height minus one viewport
   const getScrollDistance = () =>
@@ -88,15 +104,15 @@ export function initTypoScrollPreview() {
     }
   );
 
-  // --- Preview image logic ---
+  // --- Active item logic ---
   let activeItem = null;
 
-  function swapImage(itemImg) {
-    if (!itemImg) return;
-    previewImg.src = itemImg.src;
-    previewImg.alt = itemImg.alt || '';
-    if (itemImg.srcset) previewImg.srcset = itemImg.srcset;
-    if (itemImg.sizes) previewImg.sizes = itemImg.sizes;
+  // Find an item's index within its own parent list (0…n-1)
+  function getPreviewIndex(item) {
+    const parentList = item.closest('.wrgsmk-comission_list');
+    if (!parentList) return -1;
+    const siblings = parentList.querySelectorAll('.wrgsmk-comission_item');
+    return Array.from(siblings).indexOf(item);
   }
 
   function activate(item) {
@@ -106,38 +122,16 @@ export function initTypoScrollPreview() {
     activeItem = item;
     item.classList.add('is-active');
 
-    const itemImg = item.querySelector('.wrgsmk-comission_img');
-
-    if (imgContainer.classList.contains('is-revealed')) {
-      // Already revealed — quick fade on the image for the swap
-      gsap.killTweensOf(previewImg);
-      gsap.to(previewImg, {
-        opacity: 0,
-        duration: 0.25,
-        ease: 'power2.in',
-        onComplete: () => {
-          swapImage(itemImg);
-          gsap.to(previewImg, {
-            opacity: 1,
-            duration: 0.35,
-            ease: 'power2.out',
-          });
-        },
-      });
-    } else {
-      // First reveal — set src then trigger the container clip-path reveal
-      swapImage(itemImg);
-      gsap.set(previewImg, { opacity: 1 });
-      imgContainer.classList.add('is-revealed');
-    }
+    const idx = getPreviewIndex(item);
+    previews.forEach((p, i) => {
+      if (p) p.classList.toggle('is-active', i === idx);
+    });
   }
 
   function deactivate() {
     if (activeItem) activeItem.classList.remove('is-active');
     activeItem = null;
-    gsap.killTweensOf(previewImg);
-    gsap.set(previewImg, { opacity: 1 });
-    imgContainer.classList.remove('is-revealed');
+    previews.forEach((p) => p?.classList.remove('is-active'));
   }
 
   // Desktop: hover-based activation
