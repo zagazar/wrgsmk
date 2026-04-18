@@ -36,6 +36,21 @@ export function initTypoScrollPreview() {
   // use mix-blend-mode:difference to interact with the image visually.
   document.body.appendChild(imgContainer);
 
+  // Ensure stacking: pinned section/wrap (z-index 2) above preview (z-index 1).
+  // Both default to z-index: auto, so they stack by DOM order — and the
+  // container ends up last in body, covering the section. Fix with explicit z-indexes.
+  section.style.position = 'relative';
+  section.style.zIndex = '2';
+  wrap.style.position = 'relative';
+  wrap.style.zIndex = '2';
+  imgContainer.style.zIndex = '1';
+
+  // ScrollTrigger's pin-spacer wraps the section — propagate z-index once ST is set up
+  requestAnimationFrame(() => {
+    const pinSpacer = section.closest('.pin-spacer');
+    if (pinSpacer) pinSpacer.style.zIndex = '2';
+  });
+
   // Clone the list N-1 times for repeated scroll effect
   for (let i = 0; i < REPEAT_COUNT - 1; i++) {
     const clone = list.cloneNode(true);
