@@ -2,12 +2,13 @@
  * Darkmode Text — Background-position scrub animation
  *
  * Expects globals: gsap, ScrollTrigger
+ * Returns: destroy() (ScrollTrigger killed via global hook).
  */
 export function initDarkmodeText() {
-  if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return;
+  if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return () => {};
 
   const el = document.querySelector('.wrgsmk-darkmode--text__span');
-  if (!el) return;
+  if (!el) return () => {};
 
   gsap.fromTo(
     el,
@@ -23,4 +24,6 @@ export function initDarkmodeText() {
       },
     }
   );
+
+  return () => {};
 }

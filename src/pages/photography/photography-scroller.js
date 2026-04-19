@@ -2,18 +2,17 @@
  * Photography Scroller — Pins the photography section while images scroll through
  *
  * Expects globals: gsap, ScrollTrigger
+ * Returns: destroy() that removes listeners (ScrollTriggers killed via global hook).
  */
 export function initPhotographyScroller() {
-  if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return;
+  if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return () => {};
 
   const container = document.querySelector('.photography-scroller');
   const content = document.querySelector('.photography-scroller__content');
-  if (!container || !content) return;
+  if (!container || !content) return () => {};
 
   const setup = () => {
-    ScrollTrigger.getAll().forEach((st) => {
-      if (st.trigger === container) st.kill();
-    });
+    ScrollTrigger.getAll().forEach((st) => { if (st.trigger === container) st.kill(); });
 
     const contentHeight = content.offsetHeight;
     const viewportHeight = window.innerHeight;
@@ -32,26 +31,33 @@ export function initPhotographyScroller() {
 
   setup();
 
-  window.addEventListener('load', () => {
+  const windowLoad = () => {
     setup();
     ScrollTrigger.refresh();
-  });
+  };
+  window.addEventListener('load', windowLoad);
 
+  const imgLoadHandlers = [];
   const images = content.querySelectorAll('img');
   images.forEach((img) => {
     if (img.complete) return;
-    img.addEventListener(
-      'load',
-      () => {
-        setup();
-        ScrollTrigger.refresh();
-      },
-      { once: true }
-    );
+    const handler = () => {
+      setup();
+      ScrollTrigger.refresh();
+    };
+    img.addEventListener('load', handler, { once: true });
+    imgLoadHandlers.push({ img, handler });
   });
 
-  window.addEventListener('resize', () => {
+  const resize = () => {
     setup();
     ScrollTrigger.refresh();
-  });
+  };
+  window.addEventListener('resize', resize);
+
+  return function destroy() {
+    window.removeEventListener('load', windowLoad);
+    window.removeEventListener('resize', resize);
+    imgLoadHandlers.forEach(({ img, handler }) => img.removeEventListener('load', handler));
+  };
 }

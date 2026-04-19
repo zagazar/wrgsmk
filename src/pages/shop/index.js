@@ -3,6 +3,13 @@
  */
 import { initShopEffects } from './shop-effects.js';
 
-document.addEventListener('DOMContentLoaded', () => {
-  initShopEffects();
-});
+let cleanups = [];
+
+export function init() {
+  cleanups.push(initShopEffects());
+}
+
+export function destroy() {
+  cleanups.forEach((fn) => { if (typeof fn === 'function') fn(); });
+  cleanups = [];
+}

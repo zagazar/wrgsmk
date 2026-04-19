@@ -3,6 +3,13 @@
  */
 import { initTypoScrollPreview } from './typo-scroll-preview.js';
 
-document.addEventListener('DOMContentLoaded', () => {
-  initTypoScrollPreview();
-});
+let cleanups = [];
+
+export function init() {
+  cleanups.push(initTypoScrollPreview());
+}
+
+export function destroy() {
+  cleanups.forEach((fn) => { if (typeof fn === 'function') fn(); });
+  cleanups = [];
+}

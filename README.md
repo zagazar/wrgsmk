@@ -1,29 +1,27 @@
 # WRGSMK — Custom Scripts for wuergsamkeiten.com
 
-Modular, versioned JavaScript for the Webflow portfolio site. Served via [jsDelivr CDN](https://www.jsdelivr.com/).
+Single-bundle JavaScript app for the Webflow portfolio site. Served via [jsDelivr CDN](https://www.jsdelivr.com/). Includes Barba.js for SPA-style page transitions.
 
 ## Structure
 
 ```
 src/
-  core/               ← Loaded on every page
-    lenis-init.js       Lenis smooth scroll + GSAP ticker
-    parallax.js         data-speed parallax
-    context-guard.js    Right-click guard
-  pages/
-    home/             ← / only
-      horizontal-scroll.js
-      circle-text.js
-    illustration/     ← /illustration only
-      mouse-pan.js
-      rotating-words.js
-    shop/             ← /shop only
-      shop-effects.js
-dist/                 ← Minified bundles (built by esbuild)
-  wrgsmk-core.min.js
-  wrgsmk-home.min.js
-  wrgsmk-illustration.min.js
-  wrgsmk-shop.min.js
+  app/
+    index.js              ← single entry point
+    barba-controller.js   ← barba.init, views, transitions
+    transitions/          ← title-wipe and future transitions
+  core/                   ← runs once on first load
+    lenis-init.js
+    parallax.js
+    context-guard.js
+  pages/                  ← per-namespace init/destroy modules
+    home/
+    illustration/
+    shop/
+    photography/
+    auftragsarbeiten/
+dist/
+  wrgsmk-app.min.js       ← the one bundle that gets shipped
 ```
 
 ## Setup
@@ -35,22 +33,16 @@ npm run build
 
 ## Webflow Integration
 
-Add to **Site-wide Custom Code (Before `</body>`):**
+**Markup (per page template):**
+- `<body data-barba="wrapper">`
+- Outer page wrap: `data-barba="container"`, `data-barba-namespace="<slug>"`, `data-barba-title="<TITLE>"`
+
+**Site-wide Custom Code (Before `</body>`):**
 ```html
-<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.0.0/dist/wrgsmk-core.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.1.0/dist/wrgsmk-app.min.js" defer></script>
 ```
 
-Add to **Page-specific Custom Code (Before `</body>`):**
-```html
-<!-- Home -->
-<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.0.0/dist/wrgsmk-home.min.js" defer></script>
-
-<!-- Illustration -->
-<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.0.0/dist/wrgsmk-illustration.min.js" defer></script>
-
-<!-- Shop -->
-<script src="https://cdn.jsdelivr.net/gh/zagazar/wrgsmk@1.0.0/dist/wrgsmk-shop.min.js" defer></script>
-```
+No per-page Custom Code blocks needed. The bundle handles all pages based on `data-barba-namespace`.
 
 ## External Dependencies (loaded by Webflow, not bundled)
 
@@ -61,7 +53,7 @@ Add to **Page-specific Custom Code (Before `</body>`):**
 ## Releasing
 
 1. `npm run build`
-2. Commit dist/ changes
+2. Commit `dist/` changes
 3. `git tag v1.x.x && git push origin v1.x.x`
 4. jsDelivr picks up the new tag automatically
-5. Update version number in Webflow script tags
+5. Update version number in the Webflow site-wide script tag

@@ -10,6 +10,7 @@
     "build:watch": "node build.js --watch"
   },
   "devDependencies": {
+    "@barba/core": "^2.10.3",
     "esbuild": "^0.25.0"
   }
 }

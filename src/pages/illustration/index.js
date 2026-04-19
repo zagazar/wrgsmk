@@ -4,5 +4,14 @@
 import { initMousePan } from './mouse-pan.js';
 import { initRotatingWords } from './rotating-words.js';
 
-initMousePan();
-initRotatingWords();
+let cleanups = [];
+
+export function init() {
+  cleanups.push(initMousePan());
+  cleanups.push(initRotatingWords());
+}
+
+export function destroy() {
+  cleanups.forEach((fn) => { if (typeof fn === 'function') fn(); });
+  cleanups = [];
+}
