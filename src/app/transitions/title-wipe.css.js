@@ -14,6 +14,7 @@ const CSS = `
   pointer-events: none;
   overflow: hidden;
   opacity: 0;
+  background-color: #fff;
   display: flex;
   align-items: center;
   justify-content: flex-start;
