@@ -4,11 +4,13 @@
  * A giant title (100svh tall) slides right-to-left across the viewport,
  * acting as a moving curtain that hides the page swap happening behind it.
  *
- * Phase 1 (leave): text enters from right, slides until its left edge
- *   reaches viewport left — viewport is fully covered by the title.
- *   Barba swaps the container here (invisible behind the title).
- * Phase 2 (enter): text continues sliding left, exiting viewport.
- *   New page is revealed behind the trailing edge.
+ * Phase 1 (leave, 0.55s, power2.in): text enters from right, slides until
+ *   its left edge reaches viewport left — viewport is fully covered.
+ *   Ends at peak speed so Phase 2 picks up seamlessly. Barba swaps the
+ *   container here (invisible behind the title).
+ * Phase 2 (enter, 0.75s, power2.out): text continues sliding left, exiting
+ *   viewport. Starts at peak speed, decelerates. The new page's container
+ *   fades in during the last ~40% for a softer reveal.
  *
  * Title source: data.next.container.dataset.barbaTitle
  * Fallback:    data.next.namespace.toUpperCase()
@@ -52,9 +54,17 @@ function getTitle(data) {
   return ns ? ns.toUpperCase() : '';
 }
 
-const LEAVE_DURATION = 0.7;
-const ENTER_DURATION = 0.9;
-const EASE = 'power3.inOut';
+// Tuned for continuous motion: leave ends at peak speed, enter starts at
+// peak speed → no micro-pause at the cover moment.
+const LEAVE_DURATION = 0.55;
+const ENTER_DURATION = 0.75;
+const LEAVE_EASE = 'power2.in';
+const ENTER_EASE = 'power2.out';
+
+// Fraction of the enter duration during which the incoming container fades.
+// 0.5 = fade runs in the second half. Higher = later/shorter fade.
+const CONTENT_FADE_START = 0.5;
+const CONTENT_FADE_DURATION = ENTER_DURATION * (1 - CONTENT_FADE_START);
 
 export const titleWipe = {
   name: 'title-wipe',
@@ -85,7 +95,7 @@ export const titleWipe = {
     return gsap.to(textEl, {
       x: 0,
       duration: LEAVE_DURATION,
-      ease: EASE,
+      ease: LEAVE_EASE,
     });
   },
 
@@ -108,14 +118,35 @@ export const titleWipe = {
     // viewport (right edge past viewport left = x equals -textWidth).
     const textWidth = textEl.getBoundingClientRect().width;
 
-    return gsap.to(textEl, {
-      x: -textWidth,
-      duration: ENTER_DURATION,
-      ease: EASE,
+    // New page container fades in during the tail of the slide for a softer
+    // reveal than a hard cut. Safe if container is missing.
+    const nextContainer = data?.next?.container;
+    if (nextContainer) {
+      gsap.set(nextContainer, { opacity: 0 });
+    }
+
+    const tl = gsap.timeline({
       onComplete: () => {
         gsap.set(overlay, { opacity: 0 });
         gsap.set(textEl, { x: '100vw' });
+        if (nextContainer) gsap.set(nextContainer, { opacity: 1, clearProps: 'opacity' });
       },
     });
+
+    tl.to(textEl, {
+      x: -textWidth,
+      duration: ENTER_DURATION,
+      ease: ENTER_EASE,
+    }, 0);
+
+    if (nextContainer) {
+      tl.to(nextContainer, {
+        opacity: 1,
+        duration: CONTENT_FADE_DURATION,
+        ease: 'power1.out',
+      }, ENTER_DURATION * CONTENT_FADE_START);
+    }
+
+    return tl;
   },
 };
