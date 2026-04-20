@@ -1,16 +1,26 @@
 /**
- * Title Wipe Transition
+ * Title Wipe Transition — Center-Hold Pattern
  *
- * A giant title (100svh tall) slides right-to-left across the viewport,
- * acting as a moving curtain that hides the page swap happening behind it.
+ * A giant title (100svh tall) slides in from the right, HOLDS centered
+ * while the page swap and module re-init finish behind the overlay, then
+ * slides out to the left as the overlay fades away.
  *
- * Phase 1 (leave, 0.55s, power2.in): overlay fades in quickly while the
- *   text enters from right. Slide ends at peak speed (left edge = viewport
- *   left) so Phase 2 picks up seamlessly. Barba swaps the container here
- *   (invisible behind the title).
- * Phase 2 (enter, 0.75s, power2.out): text continues sliding left, exiting
- *   viewport. Starts at peak speed, decelerates. The new container fades in
- *   during the tail, overlay fades out at the very end — all tweened.
+ * Phase 1 — Leave (~0.5s, power2.out):
+ *   Text enters from right, decelerates onto a centered resting position
+ *   (middle of text aligned with viewport center).
+ *   Overlay BG fades in quickly at the start.
+ *   Returns when the text is centered.
+ *
+ * Phase 2 — Cover / Hold (natural duration):
+ *   Barba swaps the DOM container. barba-controller runs beforeEnter:
+ *   resetScroll → reinitWebflow → runInit → ScrollTrigger.refresh.
+ *   Everything happens invisibly behind the opaque overlay.
+ *
+ * Phase 3 — Enter (~1.0s):
+ *   Content fade 0 → 1 (first 200ms, invisible behind overlay).
+ *   Text slides from centered → off-screen left (power2.in).
+ *   Overlay fades out during the latter half of the slide, revealing the
+ *   already-settled new page.
  *
  * Title source: data.next.container.dataset.barbaTitle
  * Fallback:    data.next.namespace.toUpperCase()
@@ -54,20 +64,19 @@ function getTitle(data) {
   return ns ? ns.toUpperCase() : '';
 }
 
-// Tuned for continuous motion: leave ends at peak speed, enter starts at
-// peak speed → no micro-pause at the cover moment.
-const LEAVE_DURATION = 0.55;
-const ENTER_DURATION = 0.75;
-const LEAVE_EASE = 'power2.in';
-const ENTER_EASE = 'power2.out';
+// Returns the x offset needed so the text's horizontal midpoint sits at
+// the viewport's horizontal midpoint. Negative if text is wider than vp
+// (normal for this huge font-size).
+function getCenteredX(width) {
+  return (window.innerWidth - width) / 2;
+}
 
-// Overlay fade-in/out durations (short, so the reveal/cover feels snappy).
+const LEAVE_DURATION = 0.5;
+const ENTER_CONTENT_FADE = 0.2;
+const ENTER_SLIDE_DURATION = 0.75;
+const ENTER_OVERLAY_FADE = 0.3;
+
 const OVERLAY_FADE_IN = 0.15;
-const OVERLAY_FADE_OUT = 0.25;
-
-// Fraction of the enter duration during which the incoming container fades.
-const CONTENT_FADE_START = 0.5;
-const CONTENT_FADE_DURATION = ENTER_DURATION * (1 - CONTENT_FADE_START);
 
 export const titleWipe = {
   name: 'title-wipe',
@@ -77,7 +86,15 @@ export const titleWipe = {
     ensureOverlay();
     const title = getTitle(data);
     textEl.textContent = title;
-    log(`title-wipe: leave (title="${title}")`);
+
+    // Force a reflow so offsetWidth reads the new text's layout.
+    // eslint-disable-next-line no-unused-expressions
+    textEl.offsetWidth;
+
+    const textWidth = textEl.getBoundingClientRect().width;
+    const centerX = getCenteredX(textWidth);
+
+    log(`title-wipe: leave (title="${title}", width=${Math.round(textWidth)}px, centerX=${Math.round(centerX)}px)`);
 
     if (typeof gsap === 'undefined') {
       warn('title-wipe: gsap undefined, skipping');
@@ -89,24 +106,26 @@ export const titleWipe = {
       return gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.2 });
     }
 
-    // Slide text back off-screen right regardless of where a prior run left
-    // it, and start the overlay from a known invisible state so the fade-in
-    // is a real tween (not a hard set).
     const tl = gsap.timeline();
 
+    // Overlay BG fades in at the start (shorter than the slide).
     tl.fromTo(overlay,
       { opacity: 0 },
-      { opacity: 1, duration: OVERLAY_FADE_IN, ease: 'power1.out' }, 0);
+      { opacity: 1, duration: OVERLAY_FADE_IN, ease: 'power1.out' },
+      0);
 
+    // Text slides in from off-screen right, decelerates onto center.
     tl.fromTo(textEl,
       { x: '100vw' },
-      { x: 0, duration: LEAVE_DURATION, ease: LEAVE_EASE }, 0);
+      { x: centerX, duration: LEAVE_DURATION, ease: 'power2.out' },
+      0);
 
     return tl;
   },
 
   enter(data) {
     log(`title-wipe: enter (${data?.next?.namespace})`);
+
     if (typeof gsap === 'undefined') {
       if (overlay) overlay.style.opacity = '0';
       return Promise.resolve();
@@ -121,30 +140,32 @@ export const titleWipe = {
 
     const tl = gsap.timeline();
 
-    // Text slides off to the left (continues the leave-phase motion).
-    tl.to(textEl, {
-      x: -textWidth,
-      duration: ENTER_DURATION,
-      ease: ENTER_EASE,
-    }, 0);
-
-    // Incoming page fades in during the tail of the slide.
+    // Content fades in FIRST (invisible behind opaque overlay, but animated
+    // so the new page is guaranteed to be at opacity 1 before the reveal).
     if (nextContainer) {
       tl.fromTo(nextContainer,
         { opacity: 0 },
-        { opacity: 1, duration: CONTENT_FADE_DURATION, ease: 'power1.out' },
-        ENTER_DURATION * CONTENT_FADE_START);
+        { opacity: 1, duration: ENTER_CONTENT_FADE, ease: 'power1.out' },
+        0);
     }
 
-    // Overlay fades out at the very end so the reveal is a real tween
-    // instead of a hard set.
+    // Only AFTER the content settled does the text slide out.
+    const slideStart = ENTER_CONTENT_FADE;
+    tl.to(textEl, {
+      x: -textWidth,
+      duration: ENTER_SLIDE_DURATION,
+      ease: 'power2.in',
+    }, slideStart);
+
+    // Overlay fades out during the latter half of the slide so the reveal
+    // is gradual — starts ~50% through the slide, finishes near the end.
     tl.to(overlay, {
       opacity: 0,
-      duration: OVERLAY_FADE_OUT,
+      duration: ENTER_OVERLAY_FADE,
       ease: 'power1.out',
-    }, ENTER_DURATION - OVERLAY_FADE_OUT);
+    }, slideStart + ENTER_SLIDE_DURATION - ENTER_OVERLAY_FADE);
 
-    // Reset text off-screen for the next run without animating it.
+    // Reset text off-screen and clear inline container opacity.
     tl.call(() => {
       gsap.set(textEl, { x: '100vw' });
       if (nextContainer) gsap.set(nextContainer, { clearProps: 'opacity' });

@@ -157,8 +157,15 @@ export function initBarba() {
 
   barba.hooks.beforeEnter((data) => {
     group(`beforeEnter → ${data.next.namespace}`);
+    // Everything happens invisibly behind the opaque title-wipe overlay so
+    // the new page is fully prepared before the reveal starts.
     resetScroll();
     reinitWebflow();
+    runInit(data.next.namespace);
+    if (typeof ScrollTrigger !== 'undefined') {
+      log('ScrollTrigger.refresh()');
+      ScrollTrigger.refresh();
+    }
     groupEnd();
   });
 
@@ -167,13 +174,12 @@ export function initBarba() {
   });
 
   barba.hooks.afterEnter((data) => {
-    group(`afterEnter → ${data.next.namespace}`);
-    runInit(data.next.namespace);
+    // Safety refresh in case pinned content settled between beforeEnter
+    // and the end of the reveal animation.
     if (typeof ScrollTrigger !== 'undefined') {
-      log('ScrollTrigger.refresh()');
+      log(`afterEnter → ${data.next.namespace} (ST.refresh safety)`);
       ScrollTrigger.refresh();
     }
-    groupEnd();
   });
 
   barba.init({
