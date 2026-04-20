@@ -72,8 +72,18 @@ function getCenteredX(width) {
 }
 
 const LEAVE_DURATION = 0.5;
-const ENTER_CONTENT_FADE = 0.2;
-const ENTER_SLIDE_DURATION = 0.75;
+
+// Extra hold at start of enter(): even after 2× rAF in beforeEnter, give
+// GSAP ticker a safety buffer before we start revealing — ensures IX2 /
+// layout / pinned-content measurements are fully settled.
+const ENTER_HOLD = 0.18;
+
+const ENTER_CONTENT_FADE = 0.15;
+const ENTER_SLIDE_DURATION = 0.8;
+
+// Overlay fade-out begins only after the text has almost fully exited —
+// the swap visibility is behind the text, not behind a fading overlay.
+const OVERLAY_FADE_START_PCT = 0.8;   // 80% through the slide
 const ENTER_OVERLAY_FADE = 0.3;
 
 const OVERLAY_FADE_IN = 0.15;
@@ -140,30 +150,39 @@ export const titleWipe = {
 
     const tl = gsap.timeline();
 
-    // Content fades in FIRST (invisible behind opaque overlay, but animated
-    // so the new page is guaranteed to be at opacity 1 before the reveal).
+    // HOLD: extra buffer before anything starts animating. Overlay stays
+    // opaque and text stays centered during this window — any late IX2 /
+    // layout work finishes fully covered.
+    tl.to({}, { duration: ENTER_HOLD }, 0);
+
+    const contentStart = ENTER_HOLD;
+    const slideStart = contentStart + ENTER_CONTENT_FADE;
+    const overlayStart = slideStart + ENTER_SLIDE_DURATION * OVERLAY_FADE_START_PCT;
+
+    // Content fades 0 → 1 (invisible behind opaque overlay, but animated
+    // so the new page is guaranteed at opacity 1 before the reveal).
     if (nextContainer) {
       tl.fromTo(nextContainer,
         { opacity: 0 },
         { opacity: 1, duration: ENTER_CONTENT_FADE, ease: 'power1.out' },
-        0);
+        contentStart);
     }
 
-    // Only AFTER the content settled does the text slide out.
-    const slideStart = ENTER_CONTENT_FADE;
+    // Text slides off-screen left.
     tl.to(textEl, {
       x: -textWidth,
       duration: ENTER_SLIDE_DURATION,
       ease: 'power2.in',
     }, slideStart);
 
-    // Overlay fades out during the latter half of the slide so the reveal
-    // is gradual — starts ~50% through the slide, finishes near the end.
+    // Overlay fade-out only begins when the text is ~80% through its
+    // slide — by then the swap is old news and the reveal feels like
+    // the curtain catching up with the already-gone title.
     tl.to(overlay, {
       opacity: 0,
       duration: ENTER_OVERLAY_FADE,
       ease: 'power1.out',
-    }, slideStart + ENTER_SLIDE_DURATION - ENTER_OVERLAY_FADE);
+    }, overlayStart);
 
     // Reset text off-screen and clear inline container opacity.
     tl.call(() => {

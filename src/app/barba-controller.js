@@ -155,7 +155,7 @@ export function initBarba() {
     log('leave (transition start)');
   });
 
-  barba.hooks.beforeEnter((data) => {
+  barba.hooks.beforeEnter(async (data) => {
     group(`beforeEnter → ${data.next.namespace}`);
     // Everything happens invisibly behind the opaque title-wipe overlay so
     // the new page is fully prepared before the reveal starts.
@@ -166,6 +166,13 @@ export function initBarba() {
       log('ScrollTrigger.refresh()');
       ScrollTrigger.refresh();
     }
+    // Force the browser to paint the new state before enter() begins
+    // animating — prevents the reveal fade from racing IX2/layout work.
+    log('awaiting 2× rAF for paint');
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+    log('paint settled');
     groupEnd();
   });
 
