@@ -181,12 +181,10 @@ export function initBarba() {
   });
 
   barba.hooks.afterEnter((data) => {
-    // Safety refresh in case pinned content settled between beforeEnter
-    // and the end of the reveal animation.
-    if (typeof ScrollTrigger !== 'undefined') {
-      log(`afterEnter → ${data.next.namespace} (ST.refresh safety)`);
-      ScrollTrigger.refresh();
-    }
+    // Intentionally no ScrollTrigger.refresh() here — running it after the
+    // overlay has faded causes visible layout shifts in pinned sections.
+    // All refresh work happens during beforeEnter while the overlay covers.
+    log(`afterEnter → ${data.next.namespace}`);
   });
 
   barba.init({
