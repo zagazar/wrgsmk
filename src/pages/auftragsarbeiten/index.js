@@ -13,3 +13,9 @@ export function destroy() {
   cleanups.forEach((fn) => { if (typeof fn === 'function') fn(); });
   cleanups = [];
 }
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init, { once: true });
+} else {
+  init();
+}
