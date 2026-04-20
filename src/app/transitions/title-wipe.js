@@ -17,6 +17,7 @@
  *
  * Expects global: gsap
  */
+import { log, warn } from '../debug.js';
 
 const OVERLAY_ID = 'wrgsmk-wipe';
 const TEXT_CLASS = 'wrgsmk-wipe__text';
@@ -61,11 +62,17 @@ export const titleWipe = {
 
   leave(data) {
     ensureOverlay();
-    textEl.textContent = getTitle(data);
+    const title = getTitle(data);
+    textEl.textContent = title;
+    log(`title-wipe: leave (title="${title}")`);
 
-    if (typeof gsap === 'undefined') return Promise.resolve();
+    if (typeof gsap === 'undefined') {
+      warn('title-wipe: gsap undefined, skipping');
+      return Promise.resolve();
+    }
 
     if (prefersReducedMotion()) {
+      log('title-wipe: prefers-reduced-motion → fade');
       return gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.2 });
     }
 
@@ -83,6 +90,7 @@ export const titleWipe = {
   },
 
   enter(data) {
+    log(`title-wipe: enter (${data?.next?.namespace})`);
     if (typeof gsap === 'undefined') {
       if (overlay) overlay.style.opacity = '0';
       return Promise.resolve();
