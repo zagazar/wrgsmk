@@ -73,18 +73,19 @@ function getCenteredX(width) {
 
 const LEAVE_DURATION = 0.5;
 
-// Extra hold at start of enter(): even after 2× rAF in beforeEnter, give
+// Extra hold at start of enter(): even after 3× rAF in beforeEnter, give
 // GSAP ticker a safety buffer before we start revealing — ensures IX2 /
 // layout / pinned-content measurements are fully settled.
-const ENTER_HOLD = 0.18;
+const ENTER_HOLD = 0.35;
 
 const ENTER_CONTENT_FADE = 0.15;
 const ENTER_SLIDE_DURATION = 0.8;
 
-// Overlay fade-out begins only after the text has almost fully exited —
-// the swap visibility is behind the text, not behind a fading overlay.
-const OVERLAY_FADE_START_PCT = 0.8;   // 80% through the slide
-const ENTER_OVERLAY_FADE = 0.3;
+// Overlay fade-out begins AFTER the text has fully exited — the page swap
+// is guaranteed already settled when the white BG starts disappearing.
+// Negative offset is relative to slide end: 0 = exact slide end.
+const OVERLAY_FADE_AFTER_SLIDE = -0.05;  // tiny overlap so it doesn't feel stuck
+const ENTER_OVERLAY_FADE = 0.35;
 
 const OVERLAY_FADE_IN = 0.15;
 
@@ -157,7 +158,8 @@ export const titleWipe = {
 
     const contentStart = ENTER_HOLD;
     const slideStart = contentStart + ENTER_CONTENT_FADE;
-    const overlayStart = slideStart + ENTER_SLIDE_DURATION * OVERLAY_FADE_START_PCT;
+    const slideEnd = slideStart + ENTER_SLIDE_DURATION;
+    const overlayStart = slideEnd + OVERLAY_FADE_AFTER_SLIDE;
 
     // Content fades 0 → 1 (invisible behind opaque overlay, but animated
     // so the new page is guaranteed at opacity 1 before the reveal).

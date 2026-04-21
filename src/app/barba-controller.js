@@ -167,10 +167,15 @@ export function initBarba() {
       ScrollTrigger.refresh();
     }
     // Force the browser to paint the new state before enter() begins
-    // animating — prevents the reveal fade from racing IX2/layout work.
-    log('awaiting 2× rAF for paint');
+    // animating. Three frames gives layout + paint + IX2 triggers time
+    // to settle — prevents the old-page flash during the reveal.
+    log('awaiting 3× rAF for paint');
     await new Promise((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(resolve));
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        });
+      });
     });
     log('paint settled');
     groupEnd();
