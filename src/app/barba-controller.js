@@ -162,20 +162,30 @@ export function initBarba() {
     resetScroll();
     reinitWebflow();
     runInit(data.next.namespace);
+
+    // First refresh captures triggers that init'd synchronously.
     if (typeof ScrollTrigger !== 'undefined') {
-      log('ScrollTrigger.refresh()');
+      log('ScrollTrigger.refresh() #1');
       ScrollTrigger.refresh();
     }
-    // Force the browser to paint the new state before enter() begins
-    // animating. Three frames gives layout + paint + IX2 triggers time
-    // to settle — prevents the old-page flash during the reveal.
-    log('awaiting 3× rAF for paint');
+
+    // Hard settle window: gives Webflow CMS dyn-lists, lazy images, and
+    // ScrollTrigger pin-spacers enough time to finish their layout passes.
+    // Anything shorter and the pin-spacer height/padding changes leak out
+    // AFTER the overlay has faded, causing a visible shift.
+    log('awaiting 250ms settle window');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    // Second refresh catches triggers that set up async (e.g. after
+    // images/CMS finished rendering inside the new container).
+    if (typeof ScrollTrigger !== 'undefined') {
+      log('ScrollTrigger.refresh() #2');
+      ScrollTrigger.refresh();
+    }
+
+    // Final paint tick so the refresh result is committed before enter().
     await new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(resolve);
-        });
-      });
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
     });
     log('paint settled');
     groupEnd();

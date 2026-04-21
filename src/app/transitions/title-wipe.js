@@ -73,10 +73,10 @@ function getCenteredX(width) {
 
 const LEAVE_DURATION = 0.5;
 
-// Extra hold at start of enter(): even after 3× rAF in beforeEnter, give
-// GSAP ticker a safety buffer before we start revealing — ensures IX2 /
-// layout / pinned-content measurements are fully settled.
-const ENTER_HOLD = 0.35;
+// Small safety buffer at start of enter(). beforeEnter already holds for
+// ~250ms with two ScrollTrigger.refresh passes; this just covers the
+// handoff between the async hook and the first animation tick.
+const ENTER_HOLD = 0.1;
 
 const ENTER_CONTENT_FADE = 0.15;
 const ENTER_SLIDE_DURATION = 0.8;
