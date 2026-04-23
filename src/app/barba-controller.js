@@ -157,6 +157,13 @@ export function initBarba() {
 
   barba.hooks.beforeEnter(async (data) => {
     group(`beforeEnter → ${data.next.namespace}`);
+    // Hide the OLD container immediately. Barba keeps it in the DOM until
+    // after afterEnter, so without this it would flash through as soon as
+    // the overlay begins fading. Overlay is still fully opaque here.
+    if (data.current && data.current.container) {
+      data.current.container.style.display = 'none';
+      log('hid previous container');
+    }
     // Everything happens invisibly behind the opaque title-wipe overlay so
     // the new page is fully prepared before the reveal starts.
     resetScroll();
