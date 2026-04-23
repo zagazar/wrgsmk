@@ -94,7 +94,35 @@ function resetScroll() {
   }
 }
 
-function reinitWebflow() {
+// Webflow stores per-page interaction IDs on <html data-wf-page="...">.
+// During SPA nav only the barba container swaps, so <html> still carries
+// the OLD page's ID and IX2 would re-bind the wrong interactions. Copy
+// the new ID in from the fetched document before re-init.
+function syncWebflowPageId(data) {
+  try {
+    const html = data?.next?.html;
+    if (!html) return;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const incomingId = doc.documentElement.getAttribute('data-wf-page');
+    if (!incomingId) {
+      warn('no data-wf-page on incoming document');
+      return;
+    }
+    const currentId = document.documentElement.getAttribute('data-wf-page');
+    if (incomingId !== currentId) {
+      document.documentElement.setAttribute('data-wf-page', incomingId);
+      log(`data-wf-page: ${currentId} → ${incomingId}`);
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[WRGSMK:barba] syncWebflowPageId failed:', e);
+  }
+}
+
+function reinitWebflow(data) {
+  syncWebflowPageId(data);
+
   const wf = window.Webflow;
   if (!wf) {
     warn('window.Webflow not found — skipping reinit');
@@ -167,7 +195,7 @@ export function initBarba() {
     // Everything happens invisibly behind the opaque title-wipe overlay so
     // the new page is fully prepared before the reveal starts.
     resetScroll();
-    reinitWebflow();
+    reinitWebflow(data);
     runInit(data.next.namespace);
 
     // First refresh captures triggers that init'd synchronously.
