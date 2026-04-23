@@ -22,6 +22,8 @@ const CSS = `
 #wrgsmk-wipe .wrgsmk-wipe__text {
   display: inline-block;
   white-space: nowrap;
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
   font-size: 100svh;
   line-height: 1;
   will-change: transform;
