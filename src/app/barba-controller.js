@@ -17,6 +17,11 @@ import * as photographyModule from '../pages/photography/index.js';
 import * as auftragsarbeitenModule from '../pages/auftragsarbeiten/index.js';
 import * as commissionDetailModule from '../pages/commission-detail/index.js';
 
+// Pages without bespoke per-page scripts (e.g. About, Animation) share this
+// no-op namespace module so the registry lookup succeeds cleanly and
+// barba-controller doesn't warn about a missing module.
+const passthroughModule = { init() {}, destroy() {} };
+
 import { titleWipe } from './transitions/title-wipe.js';
 import { injectWipeStyles } from './transitions/title-wipe.css.js';
 import { isDebug, log, warn, group, groupEnd, time, timeEnd } from './debug.js';
@@ -37,6 +42,8 @@ const modules = {
   eventfotografie: commissionDetailModule,
   'cover-art': commissionDetailModule,
   produktinszenierung: commissionDetailModule,
+  about: passthroughModule,
+  animation: passthroughModule,
 };
 
 function runInit(namespace) {
@@ -294,6 +301,8 @@ export function initBarba() {
 // Remove this allowlist entirely once every page template is tagged.
 const TAGGED_PATHS = new Set([
   '/',
+  '/about',
+  '/animation',
   '/commissional-work',
   '/fotografie',
   '/illustration',
