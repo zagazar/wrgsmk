@@ -121,53 +121,38 @@ function syncWebflowPageId(data) {
   }
 }
 
-// Regex to identify Webflow's core runtime script by its cache-busted filename
-// (e.g. webflow.4185327b.3b70a36b54c9ca67.js).
-const WEBFLOW_CORE_SCRIPT_RE = /webflow\.[a-f0-9]+\.[a-f0-9]+\.js/;
-
-async function reloadWebflowCore() {
+// Re-bind Webflow runtime to the swapped-in Barba container WITHOUT reloading
+// script tags. The previous strategy (remove + re-append the core script)
+// broke because Webflow code-splits into `webflow.schunk.*.js` files that
+// hold references to the original core instance — reloading just the core
+// leaves the schunks pointing at stale internals and they throw
+// "TypeError: t is not a function" on the next ready() tick.
+function reinitWebflow() {
   const wf = window.Webflow;
   if (!wf) {
-    warn('window.Webflow not found — skipping reload');
+    warn('window.Webflow not found — skipping reinit');
     return;
   }
-
-  const oldScript = [...document.querySelectorAll('script[src]')]
-    .find((s) => WEBFLOW_CORE_SCRIPT_RE.test(s.src));
-  if (!oldScript) {
-    warn('no Webflow core script tag found — skipping reload');
-    return;
-  }
-  const src = oldScript.src;
-
-  // Full teardown: kills IX2, IX3, webflow forms, navbars, etc. IX3 loses its
-  // interaction config (it was fetched once via GraphQL on initial load), but
-  // reloading the core script below will refetch and rebind everything against
-  // the swapped-in Barba container — effectively a fresh-load for Webflow.
   try {
     if (typeof wf.destroy === 'function') wf.destroy();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[WRGSMK:barba] Webflow.destroy() threw:', e);
   }
-
-  oldScript.remove();
-
-  await new Promise((resolve) => {
-    const fresh = document.createElement('script');
-    fresh.src = src;
-    fresh.onload = resolve;
-    fresh.onerror = resolve;
-    document.body.appendChild(fresh);
-  });
-
   try {
-    if (typeof window.Webflow?.ready === 'function') window.Webflow.ready();
+    if (typeof wf.ready === 'function') wf.ready();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[WRGSMK:barba] Webflow.ready() threw:', e);
   }
-  log('Webflow core reloaded');
+  try {
+    const ix2 = typeof wf.require === 'function' ? wf.require('ix2') : null;
+    if (ix2 && typeof ix2.init === 'function') ix2.init();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[WRGSMK:barba] ix2.init() threw:', e);
+  }
+  log('Webflow reinit complete');
 }
 
 export function initBarba() {
@@ -226,7 +211,7 @@ export function initBarba() {
     // the new page is fully prepared before the reveal starts.
     resetScroll();
     syncWebflowPageId(data);
-    await reloadWebflowCore();
+    reinitWebflow();
     refreshParallax();
     runInit(data.next.namespace);
 

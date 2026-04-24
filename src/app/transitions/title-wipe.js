@@ -61,7 +61,14 @@ function getTitle(data) {
   const fromAttr = data?.next?.container?.dataset?.barbaTitle;
   if (fromAttr) return fromAttr;
   const ns = data?.next?.namespace;
-  return ns ? ns.toUpperCase() : '';
+  if (ns) return ns.toUpperCase();
+  // URL-path fallback: Barba sometimes hasn't populated `namespace` by the
+  // time `leave()` runs, so pull the last meaningful path segment instead —
+  // "/auftragsarbeiten/luvcat" → "LUVCAT", "/illustration" → "ILLUSTRATION".
+  const path = (data?.next?.url?.path || '').replace(/\/+$/, '');
+  const last = path.split('/').filter(Boolean).pop();
+  if (last) return last.replace(/-/g, ' ').toUpperCase();
+  return 'WÜRGSAMKEITEN';
 }
 
 // Returns the x offset needed so the text's horizontal midpoint sits at
