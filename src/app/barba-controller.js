@@ -129,11 +129,25 @@ function reinitWebflow(data) {
     return;
   }
   try {
-    log('reinit Webflow (destroy → ready → ix2.init)');
-    if (typeof wf.destroy === 'function') wf.destroy();
-    if (typeof wf.ready === 'function') wf.ready();
+    // Do NOT call Webflow.destroy() — it nukes IX3 (GSAP-based interactions),
+    // and Webflow only fetches the IX3 interaction config once on the initial
+    // page load (via a GraphQL apollo request). There is no public API to
+    // re-fetch, so destroying leaves IX3 permanently empty for the rest of
+    // the session — all hover/page-load/scroll GSAP interactions silently
+    // die on the first SPA nav.
+    //
+    // Instead, rebind IX2 (legacy) surgically and leave IX3 intact. IX3
+    // uses event delegation under the hood, so its hover/scroll triggers
+    // automatically pick up new DOM after the Barba container swap.
+    log('reinit Webflow (ix2 destroy+init, ix3 ready)');
     const ix2 = typeof wf.require === 'function' ? wf.require('ix2') : null;
+    if (ix2 && typeof ix2.destroy === 'function') ix2.destroy();
+    if (typeof wf.ready === 'function') wf.ready();
     if (ix2 && typeof ix2.init === 'function') ix2.init();
+
+    // IX3 ready() is idempotent and does not wipe existing interactions.
+    const ix3 = typeof wf.require === 'function' ? wf.require('ix3') : null;
+    if (ix3 && typeof ix3.ready === 'function') ix3.ready();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[WRGSMK:barba] Webflow reinit failed:', e);
