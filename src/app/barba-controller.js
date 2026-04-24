@@ -20,6 +20,7 @@ import * as commissionDetailModule from '../pages/commission-detail/index.js';
 import { titleWipe } from './transitions/title-wipe.js';
 import { injectWipeStyles } from './transitions/title-wipe.css.js';
 import { isDebug, log, warn, group, groupEnd, time, timeEnd } from './debug.js';
+import { refreshParallax } from '../core/parallax.js';
 
 const modules = {
   home: homeModule,
@@ -120,38 +121,53 @@ function syncWebflowPageId(data) {
   }
 }
 
-function reinitWebflow(data) {
-  syncWebflowPageId(data);
+// Regex to identify Webflow's core runtime script by its cache-busted filename
+// (e.g. webflow.4185327b.3b70a36b54c9ca67.js).
+const WEBFLOW_CORE_SCRIPT_RE = /webflow\.[a-f0-9]+\.[a-f0-9]+\.js/;
 
+async function reloadWebflowCore() {
   const wf = window.Webflow;
   if (!wf) {
-    warn('window.Webflow not found — skipping reinit');
+    warn('window.Webflow not found — skipping reload');
     return;
   }
-  try {
-    // Do NOT call Webflow.destroy() — it nukes IX3 (GSAP-based interactions),
-    // and Webflow only fetches the IX3 interaction config once on the initial
-    // page load (via a GraphQL apollo request). There is no public API to
-    // re-fetch, so destroying leaves IX3 permanently empty for the rest of
-    // the session — all hover/page-load/scroll GSAP interactions silently
-    // die on the first SPA nav.
-    //
-    // Instead, rebind IX2 (legacy) surgically and leave IX3 intact. IX3
-    // uses event delegation under the hood, so its hover/scroll triggers
-    // automatically pick up new DOM after the Barba container swap.
-    log('reinit Webflow (ix2 destroy+init, ix3 ready)');
-    const ix2 = typeof wf.require === 'function' ? wf.require('ix2') : null;
-    if (ix2 && typeof ix2.destroy === 'function') ix2.destroy();
-    if (typeof wf.ready === 'function') wf.ready();
-    if (ix2 && typeof ix2.init === 'function') ix2.init();
 
-    // IX3 ready() is idempotent and does not wipe existing interactions.
-    const ix3 = typeof wf.require === 'function' ? wf.require('ix3') : null;
-    if (ix3 && typeof ix3.ready === 'function') ix3.ready();
+  const oldScript = [...document.querySelectorAll('script[src]')]
+    .find((s) => WEBFLOW_CORE_SCRIPT_RE.test(s.src));
+  if (!oldScript) {
+    warn('no Webflow core script tag found — skipping reload');
+    return;
+  }
+  const src = oldScript.src;
+
+  // Full teardown: kills IX2, IX3, webflow forms, navbars, etc. IX3 loses its
+  // interaction config (it was fetched once via GraphQL on initial load), but
+  // reloading the core script below will refetch and rebind everything against
+  // the swapped-in Barba container — effectively a fresh-load for Webflow.
+  try {
+    if (typeof wf.destroy === 'function') wf.destroy();
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] Webflow reinit failed:', e);
+    console.warn('[WRGSMK:barba] Webflow.destroy() threw:', e);
   }
+
+  oldScript.remove();
+
+  await new Promise((resolve) => {
+    const fresh = document.createElement('script');
+    fresh.src = src;
+    fresh.onload = resolve;
+    fresh.onerror = resolve;
+    document.body.appendChild(fresh);
+  });
+
+  try {
+    if (typeof window.Webflow?.ready === 'function') window.Webflow.ready();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[WRGSMK:barba] Webflow.ready() threw:', e);
+  }
+  log('Webflow core reloaded');
 }
 
 export function initBarba() {
@@ -209,7 +225,9 @@ export function initBarba() {
     // Everything happens invisibly behind the opaque title-wipe overlay so
     // the new page is fully prepared before the reveal starts.
     resetScroll();
-    reinitWebflow(data);
+    syncWebflowPageId(data);
+    await reloadWebflowCore();
+    refreshParallax();
     runInit(data.next.namespace);
 
     // First refresh captures triggers that init'd synchronously.
