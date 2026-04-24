@@ -292,6 +292,9 @@ export function initBarba() {
 const TAGGED_PATHS = new Set([
   '/',
   '/commissional-work',
+  '/fotografie',
+  '/illustration',
+  '/shop',
   '/auftragsarbeiten/luvcat',
   '/auftragsarbeiten/kdk-festival-design',
   '/auftragsarbeiten/grey-men',
