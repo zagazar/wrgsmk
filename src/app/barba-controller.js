@@ -147,26 +147,41 @@ function syncWebflowPageId(data) {
 const WEBFLOW_SCRIPT_RE = /(?:webflow\.[a-f0-9]+\.[a-f0-9]+|webflow\.schunk\.[a-f0-9]+)\.js/;
 
 async function reinitWebflow() {
-  const wf = window.Webflow;
-  if (!wf) {
-    warn('window.Webflow not found — skipping reinit');
+  // Strategy: mimic the hard-reload boot sequence as closely as possible.
+  // Empirically, calling Webflow.destroy() + ready() ourselves corrupted
+  // the schunks' module registry — ready() then threw "t is not a function"
+  // inside o.define and IX3/GSAP interactions never re-bound. Hard reloads
+  // never call destroy/ready manually; they just let the script tags
+  // execute naturally and the core auto-init handles the rest. So we wipe
+  // the Webflow global, replace every Webflow-pattern script tag with a
+  // fresh copy in document order, and let the core do its own init.
+  const wfScripts = [...document.querySelectorAll('script[src]')]
+    .filter((s) => WEBFLOW_SCRIPT_RE.test(s.src));
+  if (!wfScripts.length) {
+    warn('no Webflow scripts found — skipping reinit');
     return;
   }
 
+  const srcs = wfScripts.map((s) => s.src);
+  log(`reloading ${srcs.length} Webflow script(s)`);
+
+  // Best-effort cleanup of running interactions before swap. Wrapped in
+  // try/catch because some Webflow versions throw inside destroy().
   try {
-    if (typeof wf.destroy === 'function') wf.destroy();
+    if (window.Webflow && typeof window.Webflow.destroy === 'function') {
+      window.Webflow.destroy();
+    }
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[WRGSMK:barba] Webflow.destroy() threw:', e);
   }
 
-  const wfScripts = [...document.querySelectorAll('script[src]')]
-    .filter((s) => WEBFLOW_SCRIPT_RE.test(s.src));
-  log(`reloading ${wfScripts.length} Webflow script(s)`);
+  // Remove old tags + clear the global so schunks register against a
+  // fully fresh Webflow instance.
+  for (const s of wfScripts) s.remove();
+  try { delete window.Webflow; } catch { window.Webflow = undefined; }
 
-  for (const oldScript of wfScripts) {
-    const src = oldScript.src;
-    oldScript.remove();
+  for (const src of srcs) {
     await new Promise((resolve) => {
       const fresh = document.createElement('script');
       fresh.src = src;
@@ -176,19 +191,6 @@ async function reinitWebflow() {
     });
   }
 
-  try {
-    if (typeof window.Webflow?.ready === 'function') window.Webflow.ready();
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] Webflow.ready() threw:', e);
-  }
-  try {
-    const ix2 = window.Webflow?.require?.('ix2');
-    if (ix2 && typeof ix2.init === 'function') ix2.init();
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] ix2.init() threw:', e);
-  }
   log('Webflow reinit complete');
 }
 
