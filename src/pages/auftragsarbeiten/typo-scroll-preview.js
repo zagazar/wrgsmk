@@ -36,6 +36,13 @@ export function initTypoScrollPreview() {
     preview.classList.remove('wrgsmk-comission_img');
     preview.classList.add('typo-preview');
     preview.removeAttribute('aria-hidden');
+    // Strip Webflow-IX inline state (transform/opacity from a frozen reveal
+    // animation). On hard-reload the original sits at end-frame so cloning
+    // is harmless, but after a Barba nav IX3 doesn't rebind and the source
+    // stays at the start-frame (opacity:0). Without this the clone inherits
+    // opacity:0 and `.typo-preview.is-active { opacity:1 }` can't beat the
+    // inline style.
+    preview.removeAttribute('style');
     document.body.appendChild(preview);
     previews.push(preview);
   });
