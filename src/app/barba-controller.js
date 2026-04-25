@@ -147,14 +147,6 @@ function syncWebflowPageId(data) {
 const WEBFLOW_SCRIPT_RE = /(?:webflow\.[a-f0-9]+\.[a-f0-9]+|webflow\.schunk\.[a-f0-9]+)\.js/;
 
 async function reinitWebflow() {
-  // Strategy: mimic the hard-reload boot sequence as closely as possible.
-  // Empirically, calling Webflow.destroy() + ready() ourselves corrupted
-  // the schunks' module registry — ready() then threw "t is not a function"
-  // inside o.define and IX3/GSAP interactions never re-bound. Hard reloads
-  // never call destroy/ready manually; they just let the script tags
-  // execute naturally and the core auto-init handles the rest. So we wipe
-  // the Webflow global, replace every Webflow-pattern script tag with a
-  // fresh copy in document order, and let the core do its own init.
   const wfScripts = [...document.querySelectorAll('script[src]')]
     .filter((s) => WEBFLOW_SCRIPT_RE.test(s.src));
   if (!wfScripts.length) {
@@ -165,8 +157,6 @@ async function reinitWebflow() {
   const srcs = wfScripts.map((s) => s.src);
   log(`reloading ${srcs.length} Webflow script(s)`);
 
-  // Best-effort cleanup of running interactions before swap. Wrapped in
-  // try/catch because some Webflow versions throw inside destroy().
   try {
     if (window.Webflow && typeof window.Webflow.destroy === 'function') {
       window.Webflow.destroy();
@@ -176,20 +166,21 @@ async function reinitWebflow() {
     console.warn('[WRGSMK:barba] Webflow.destroy() threw:', e);
   }
 
-  // Remove old tags + clear the global so schunks register against a
-  // fully fresh Webflow instance.
   for (const s of wfScripts) s.remove();
   try { delete window.Webflow; } catch { window.Webflow = undefined; }
 
-  for (const src of srcs) {
-    await new Promise((resolve) => {
-      const fresh = document.createElement('script');
-      fresh.src = src;
-      fresh.onload = resolve;
-      fresh.onerror = resolve;
-      document.body.appendChild(fresh);
-    });
-  }
+  // Insert all scripts at once with async=false so the browser fetches
+  // them in parallel but still executes them in DOM insertion order.
+  // The schunks register modules against the core via Webflow.push(), so
+  // execution order matters; the network round-trips do not.
+  await Promise.all(srcs.map((src) => new Promise((resolve) => {
+    const fresh = document.createElement('script');
+    fresh.src = src;
+    fresh.async = false;
+    fresh.onload = resolve;
+    fresh.onerror = resolve;
+    document.body.appendChild(fresh);
+  })));
 
   log('Webflow reinit complete');
 }
