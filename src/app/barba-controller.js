@@ -128,35 +128,54 @@ function syncWebflowPageId(data) {
   }
 }
 
-// Re-bind Webflow runtime to the swapped-in Barba container.
+// Sync the page's script tags to whatever the next page actually needs.
 //
-// Two concerns:
-//  1. IX2 (legacy interactions) needs `Webflow.destroy() → ready() →
-//     require('ix2').init()` to rebind handlers to the new DOM.
-//  2. IX3 / GSAP interactions live in `webflow.schunk.*.js` modules whose
-//     init callbacks register via `Webflow.push(...)` and are consumed
-//     out of the queue on first run. Calling ready() again does NOT
-//     re-execute them — the queue slot is already empty.
+// Webflow compiles page-specific IX bundles (`webflow.schunk.<hash>.js`)
+// and lets users add per-page Custom Code (e.g. CircleType in <head> of
+// the home page only). Barba never swaps <head>, and `<script>` tags
+// inserted via innerHTML aren't executed by the browser — so any script
+// that the next page expects but the current entry page never loaded
+// stays missing, taking with it `window.CircleType`, the new page's IX
+// compile output, etc.
 //
-// So we reload every Webflow script (core + schunks) in document order:
-// fresh script execution re-pushes the GSAP interaction callbacks into
-// the queue, and the subsequent ready() call replays them against the
-// newly-swapped container. Earlier we reloaded ONLY the core, which left
-// the still-loaded schunks pointing at a dead core instance and threw
-// "TypeError: t is not a function".
-const WEBFLOW_SCRIPT_RE = /(?:webflow\.[a-f0-9]+\.[a-f0-9]+|webflow\.schunk\.[a-f0-9]+)\.js/;
+// Strategy: parse `data.next.html`, diff the script-src list against
+// what's currently in the DOM, and inject any missing scripts via
+// createElement so the browser actually executes them. Then destroy +
+// ready Webflow's runtime so the freshly-loaded schunks register their
+// IX setup callbacks against the swapped-in container.
+//
+// We deliberately do NOT remove old page-specific scripts — they're
+// inert once their setup is unbound, and removing them risks tripping
+// modules that hold internal references.
+const WEBFLOW_SCRIPT_RE = /webflow.*\.js/i;
 
-async function reinitWebflow() {
-  const wfScripts = [...document.querySelectorAll('script[src]')]
-    .filter((s) => WEBFLOW_SCRIPT_RE.test(s.src));
-  if (!wfScripts.length) {
-    warn('no Webflow scripts found — skipping reinit');
+async function syncPageScripts(data) {
+  const html = data?.next?.html;
+  if (!html) {
+    warn('no data.next.html — skipping script sync');
     return;
   }
 
-  const srcs = wfScripts.map((s) => s.src);
-  log(`reloading ${srcs.length} Webflow script(s)`);
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
 
+  const expected = [...doc.querySelectorAll('script[src]')]
+    .map((s) => s.src)
+    .filter(Boolean);
+  const currentSrcs = new Set(
+    [...document.querySelectorAll('script[src]')].map((s) => s.src),
+  );
+
+  const missing = expected.filter((src) => !currentSrcs.has(src));
+  if (!missing.length) {
+    log('script sync: nothing to load');
+  } else {
+    log(`script sync: loading ${missing.length} missing script(s)`);
+  }
+
+  // Tear down old Webflow bindings before adding fresh schunks; otherwise
+  // the new schunks' `Webflow.push(...)` callbacks may collide with stale
+  // state on `Webflow.ready()`.
   try {
     if (window.Webflow && typeof window.Webflow.destroy === 'function') {
       window.Webflow.destroy();
@@ -166,23 +185,45 @@ async function reinitWebflow() {
     console.warn('[WRGSMK:barba] Webflow.destroy() threw:', e);
   }
 
-  for (const s of wfScripts) s.remove();
-  try { delete window.Webflow; } catch { window.Webflow = undefined; }
-
-  // Insert all scripts at once with async=false so the browser fetches
-  // them in parallel but still executes them in DOM insertion order.
-  // The schunks register modules against the core via Webflow.push(), so
-  // execution order matters; the network round-trips do not.
-  await Promise.all(srcs.map((src) => new Promise((resolve) => {
+  await Promise.all(missing.map((src) => new Promise((resolve) => {
     const fresh = document.createElement('script');
     fresh.src = src;
     fresh.async = false;
     fresh.onload = resolve;
     fresh.onerror = resolve;
-    document.body.appendChild(fresh);
+    // Webflow scripts go to <body> to match where Webflow itself emits
+    // them; everything else (CircleType, page Custom Code) goes to <head>
+    // since that's where Webflow's per-page Head Code lives.
+    const target = WEBFLOW_SCRIPT_RE.test(src) ? document.body : document.head;
+    target.appendChild(fresh);
   })));
 
-  log('Webflow reinit complete');
+  // Re-fire the Webflow ready queue so freshly-loaded schunks' setup
+  // callbacks bind their IX2 / IX3 interactions to the new container.
+  try {
+    if (window.Webflow && typeof window.Webflow.ready === 'function') {
+      window.Webflow.ready();
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[WRGSMK:barba] Webflow.ready() threw:', e);
+  }
+  try {
+    const ix2 = window.Webflow?.require?.('ix2');
+    if (ix2 && typeof ix2.init === 'function') ix2.init();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[WRGSMK:barba] ix2.init() threw:', e);
+  }
+  try {
+    const ix3 = window.Webflow?.require?.('ix3');
+    if (ix3 && typeof ix3.ready === 'function') ix3.ready();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[WRGSMK:barba] ix3.ready() threw:', e);
+  }
+
+  log('Webflow rebind complete');
 }
 
 export function initBarba() {
@@ -241,7 +282,7 @@ export function initBarba() {
     // the new page is fully prepared before the reveal starts.
     resetScroll();
     syncWebflowPageId(data);
-    await reinitWebflow();
+    await syncPageScripts(data);
     refreshParallax();
     runInit(data.next.namespace);
 
