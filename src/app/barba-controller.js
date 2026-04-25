@@ -128,32 +128,62 @@ function syncWebflowPageId(data) {
   }
 }
 
-// Re-bind Webflow runtime to the swapped-in Barba container WITHOUT reloading
-// script tags. The previous strategy (remove + re-append the core script)
-// broke because Webflow code-splits into `webflow.schunk.*.js` files that
-// hold references to the original core instance — reloading just the core
-// leaves the schunks pointing at stale internals and they throw
-// "TypeError: t is not a function" on the next ready() tick.
-function reinitWebflow() {
+// Re-bind Webflow runtime to the swapped-in Barba container.
+//
+// Two concerns:
+//  1. IX2 (legacy interactions) needs `Webflow.destroy() → ready() →
+//     require('ix2').init()` to rebind handlers to the new DOM.
+//  2. IX3 / GSAP interactions live in `webflow.schunk.*.js` modules whose
+//     init callbacks register via `Webflow.push(...)` and are consumed
+//     out of the queue on first run. Calling ready() again does NOT
+//     re-execute them — the queue slot is already empty.
+//
+// So we reload every Webflow script (core + schunks) in document order:
+// fresh script execution re-pushes the GSAP interaction callbacks into
+// the queue, and the subsequent ready() call replays them against the
+// newly-swapped container. Earlier we reloaded ONLY the core, which left
+// the still-loaded schunks pointing at a dead core instance and threw
+// "TypeError: t is not a function".
+const WEBFLOW_SCRIPT_RE = /(?:webflow\.[a-f0-9]+\.[a-f0-9]+|webflow\.schunk\.[a-f0-9]+)\.js/;
+
+async function reinitWebflow() {
   const wf = window.Webflow;
   if (!wf) {
     warn('window.Webflow not found — skipping reinit');
     return;
   }
+
   try {
     if (typeof wf.destroy === 'function') wf.destroy();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[WRGSMK:barba] Webflow.destroy() threw:', e);
   }
+
+  const wfScripts = [...document.querySelectorAll('script[src]')]
+    .filter((s) => WEBFLOW_SCRIPT_RE.test(s.src));
+  log(`reloading ${wfScripts.length} Webflow script(s)`);
+
+  for (const oldScript of wfScripts) {
+    const src = oldScript.src;
+    oldScript.remove();
+    await new Promise((resolve) => {
+      const fresh = document.createElement('script');
+      fresh.src = src;
+      fresh.onload = resolve;
+      fresh.onerror = resolve;
+      document.body.appendChild(fresh);
+    });
+  }
+
   try {
-    if (typeof wf.ready === 'function') wf.ready();
+    if (typeof window.Webflow?.ready === 'function') window.Webflow.ready();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[WRGSMK:barba] Webflow.ready() threw:', e);
   }
   try {
-    const ix2 = typeof wf.require === 'function' ? wf.require('ix2') : null;
+    const ix2 = window.Webflow?.require?.('ix2');
     if (ix2 && typeof ix2.init === 'function') ix2.init();
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -218,7 +248,7 @@ export function initBarba() {
     // the new page is fully prepared before the reveal starts.
     resetScroll();
     syncWebflowPageId(data);
-    reinitWebflow();
+    await reinitWebflow();
     refreshParallax();
     runInit(data.next.namespace);
 
