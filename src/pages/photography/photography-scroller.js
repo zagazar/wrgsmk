@@ -1,8 +1,12 @@
 /**
- * Photography Scroller — Pins the photography section while images scroll through
+ * Photography Scroller — Pins the photography section while images scroll through.
+ *
+ * Uses pinSpacing: false plus a manual marginBottom so the masonry grid
+ * directly under .photography-scroller butts up against the section
+ * without ScrollTrigger inserting a `.pin-spacer` wrapper between them.
  *
  * Expects globals: gsap, ScrollTrigger
- * Returns: destroy() that removes listeners (ScrollTriggers killed via global hook).
+ * Returns: destroy() that kills the ScrollTrigger and detaches listeners.
  */
 export function initPhotographyScroller() {
   if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return () => {};
@@ -11,53 +15,41 @@ export function initPhotographyScroller() {
   const content = document.querySelector('.photography-scroller__content');
   if (!container || !content) return () => {};
 
-  const setup = () => {
-    ScrollTrigger.getAll().forEach((st) => { if (st.trigger === container) st.kill(); });
+  const calcSpace = () => Math.max(content.offsetHeight - window.innerHeight, 0);
 
-    const contentHeight = content.offsetHeight;
-    const viewportHeight = window.innerHeight;
-    const space = contentHeight - viewportHeight;
-    container.style.marginBottom = space > 0 ? space + 'px' : '0px';
-
-    ScrollTrigger.create({
-      trigger: container,
-      start: 'top top',
-      end: () => '+=' + space,
-      pin: true,
-      pinSpacing: false,
-      anticipatePin: 1,
-    });
+  const updateMargin = () => {
+    container.style.marginBottom = calcSpace() + 'px';
   };
+  updateMargin();
 
-  setup();
-
-  const windowLoad = () => {
-    setup();
-    ScrollTrigger.refresh();
-  };
-  window.addEventListener('load', windowLoad);
-
-  const imgLoadHandlers = [];
-  const images = content.querySelectorAll('img');
-  images.forEach((img) => {
-    if (img.complete) return;
-    const handler = () => {
-      setup();
-      ScrollTrigger.refresh();
-    };
-    img.addEventListener('load', handler, { once: true });
-    imgLoadHandlers.push({ img, handler });
+  const trigger = ScrollTrigger.create({
+    trigger: container,
+    start: 'top top',
+    end: () => '+=' + calcSpace(),
+    pin: true,
+    pinSpacing: false,
+    anticipatePin: 1,
+    invalidateOnRefresh: true,
+    onRefresh: updateMargin,
   });
 
-  const resize = () => {
-    setup();
-    ScrollTrigger.refresh();
-  };
-  window.addEventListener('resize', resize);
+  // ScrollTrigger listens for window resize internally and calls
+  // refresh() — no resize handler of our own. We only force a refresh
+  // when images finish loading, since that changes content height.
+  const refresh = () => ScrollTrigger.refresh();
+  window.addEventListener('load', refresh);
+
+  const imgs = [];
+  content.querySelectorAll('img').forEach((img) => {
+    if (img.complete) return;
+    img.addEventListener('load', refresh, { once: true });
+    imgs.push(img);
+  });
 
   return function destroy() {
-    window.removeEventListener('load', windowLoad);
-    window.removeEventListener('resize', resize);
-    imgLoadHandlers.forEach(({ img, handler }) => img.removeEventListener('load', handler));
+    trigger.kill();
+    container.style.marginBottom = '';
+    window.removeEventListener('load', refresh);
+    imgs.forEach((img) => img.removeEventListener('load', refresh));
   };
 }
