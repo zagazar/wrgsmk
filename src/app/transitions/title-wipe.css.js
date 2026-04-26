@@ -1,10 +1,9 @@
 /**
  * CSS for the title-wipe overlay.
  *
- * Injected once on app start so the transition works on any page without
- * requiring Webflow stylesheet changes. The text inherits color/font-family
- * from its `.wrgsmk-comission_title` Webflow class; this module handles
- * overlay geometry and neutralizes properties that would break the wipe.
+ * Bundled and injected on app start. Mirrors the inline <style> the
+ * site-wide pre-paint snippet emits — kept in sync so the snippet's
+ * painted overlay and the bundle's adopted overlay render identically.
  */
 const CSS = `
 #wrgsmk-wipe {
@@ -17,32 +16,29 @@ const CSS = `
   background-color: #fff;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
-#wrgsmk-wipe .wrgsmk-wipe__text {
+#wrgsmk-wipe .wrgsmk-wipe__letter {
   display: inline-block;
-  white-space: nowrap;
+  overflow: hidden;
   font-family: 'Anton', sans-serif;
   font-weight: 400;
   font-size: 100svh;
   line-height: 1;
-  will-change: transform;
-  transform: translateX(100vw);
-  /* Override the Webflow hover transitions — overlay text must not animate
-     color/letter-spacing during the wipe. */
-  transition: none !important;
+  white-space: pre;
+  flex-shrink: 0;
 }
-#wrgsmk-wipe .wrgsmk-wipe__text:hover {
-  letter-spacing: inherit !important;
+#wrgsmk-wipe .wrgsmk-wipe__inner {
+  display: inline-block;
+  transform-origin: right center;
+  color: #f94500;
+  will-change: transform, opacity;
 }
 
-/* Pre-paint state used by the inline snippet in Webflow's site-wide head
-   Custom Code: overlay opaque, title centered horizontally via calc. The
-   bundle adopts this overlay on load and animates the slide-out. */
+/* Pre-paint state used by the inline snippet: overlay opaque, all
+   letters in their natural visible state — matches the end-frame of
+   leave()'s entry animation so the bundle can hand off invisibly. */
 #wrgsmk-wipe.is-incoming { opacity: 1; }
-#wrgsmk-wipe.is-incoming .wrgsmk-wipe__text {
-  transform: translateX(calc(50vw - 50%));
-}
 `;
 
 export function injectWipeStyles() {

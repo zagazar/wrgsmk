@@ -1,72 +1,78 @@
 /**
- * Title Wipe Transition — Center-Hold Pattern
+ * Title Wipe Transition — Per-letter stagger.
  *
- * A giant title (100svh tall) slides in from the right, HOLDS centered
- * while the page swap and module re-init finish behind the overlay, then
- * slides out to the left as the overlay fades away.
+ * Leave (click → page-load):
+ *   Each letter pops in at the right edge (right-anchored flex), with
+ *   width 0 → natural pushing earlier letters left, plus inner scale
+ *   0 → 1 + opacity 0 → 1. Easing: back.out(1.4) for a tiny overshoot.
  *
- * Phase 1 — Leave (~0.5s, power2.out):
- *   Text enters from right, decelerates onto a centered resting position
- *   (middle of text aligned with viewport center).
- *   Overlay BG fades in quickly at the start.
- *   Returns when the text is centered.
+ * Hold (during page navigation):
+ *   Whole title sits at the right viewport edge while window.location
+ *   loads the new page. Pre-paint snippet in the next page's <head>
+ *   re-paints this state synchronously so there's no flash.
  *
- * Phase 2 — Cover / Hold (natural duration):
- *   Barba swaps the DOM container. barba-controller runs beforeEnter:
- *   resetScroll → reinitWebflow → runInit → ScrollTrigger.refresh.
- *   Everything happens invisibly behind the opaque overlay.
+ * Enter (new page → reveal):
+ *   Letters fall down one at a time (left → right stagger), then the
+ *   overlay fades out.
  *
- * Phase 3 — Enter (~1.0s):
- *   Content fade 0 → 1 (first 200ms, invisible behind overlay).
- *   Text slides from centered → off-screen left (power2.in).
- *   Overlay fades out during the latter half of the slide, revealing the
- *   already-settled new page.
+ * Reduced-motion: no per-letter animation; just a brief overlay fade.
  *
- * Title source: data.next.container.dataset.barbaTitle
- * Fallback:    data.next.namespace.toUpperCase()
- *
- * Reduced-motion: skip slide, just hold a short fade.
- *
- * Expects global: gsap
+ * Title source: data.next.container.dataset.barbaTitle, fallback to
+ *   namespace, fallback to URL last-segment.
  */
 import { log, warn } from '../debug.js';
 
 const OVERLAY_ID = 'wrgsmk-wipe';
-const TEXT_CLASS = 'wrgsmk-wipe__text';
+const LETTER_CLASS = 'wrgsmk-wipe__letter';
+const INNER_CLASS = 'wrgsmk-wipe__inner';
+
+const STAGGER = 0.04;             // 40 ms between letters
+const LETTER_DURATION = 0.166;    // per-letter scale/opacity/width
+const LETTER_EASE = 'back.out(1.4)';
+const OVERLAY_FADE_IN = 0.15;
+
+const ENTER_HOLD = 0.1;
+const FALL_DURATION = 0.4;
+const FALL_EASE = 'power2.in';
+const ENTER_OVERLAY_FADE = 0.3;
 
 let overlay = null;
-let textEl = null;
 
 function ensureOverlay() {
   if (overlay && document.body.contains(overlay)) return;
-
-  // Inline pre-paint snippet (in Webflow's site-wide head Custom Code)
-  // may have already inserted #wrgsmk-wipe so the overlay is on screen
-  // from the very first paint, before this deferred bundle even loads.
-  // If so, adopt it instead of creating a duplicate.
+  // Inline pre-paint snippet may have already inserted the overlay so
+  // it's on screen from the very first frame, before this deferred
+  // bundle loads. Adopt it instead of creating a duplicate.
   const existing = document.getElementById(OVERLAY_ID);
   if (existing) {
     overlay = existing;
-    textEl = existing.querySelector('.' + TEXT_CLASS) || existing.querySelector('span');
-    if (!textEl) {
-      textEl = document.createElement('span');
-      textEl.className = `wrgsmk-comission_title ${TEXT_CLASS}`;
-      overlay.appendChild(textEl);
-    }
     return;
   }
-
   overlay = document.createElement('div');
   overlay.id = OVERLAY_ID;
-
-  textEl = document.createElement('span');
-  // Piggy-back on the Webflow class so color/weight/font-family match the
-  // Auftragsarbeiten title style. Our own class overrides font-size +
-  // neutralizes the hover transition for the full-viewport wipe.
-  textEl.className = `wrgsmk-comission_title ${TEXT_CLASS}`;
-
-  overlay.appendChild(textEl);
   document.body.appendChild(overlay);
+}
+
+function setupLetters(title) {
+  // Idempotent: skip rebuild when the existing letters already match.
+  const existing = overlay.querySelectorAll('.' + LETTER_CLASS);
+  if (existing.length === title.length) {
+    let same = true;
+    for (let i = 0; i < title.length; i++) {
+      if (existing[i].textContent !== title[i]) { same = false; break; }
+    }
+    if (same) return;
+  }
+  overlay.innerHTML = '';
+  for (const ch of title) {
+    const wrap = document.createElement('span');
+    wrap.className = LETTER_CLASS;
+    const inner = document.createElement('span');
+    inner.className = INNER_CLASS;
+    inner.textContent = ch;
+    wrap.appendChild(inner);
+    overlay.appendChild(wrap);
+  }
 }
 
 function prefersReducedMotion() {
@@ -78,57 +84,21 @@ function getTitle(data) {
   if (fromAttr) return fromAttr;
   const ns = data?.next?.namespace;
   if (ns) return ns.toUpperCase();
-  // URL-path fallback: Barba sometimes hasn't populated `namespace` by the
-  // time `leave()` runs, so pull the last meaningful path segment instead —
-  // "/auftragsarbeiten/luvcat" → "LUVCAT", "/illustration" → "ILLUSTRATION".
   const path = (data?.next?.url?.path || '').replace(/\/+$/, '');
   const last = path.split('/').filter(Boolean).pop();
   if (last) return last.replace(/-/g, ' ').toUpperCase();
   return 'WÜRGSAMKEITEN';
 }
 
-// Returns the x offset needed so the text's horizontal midpoint sits at
-// the viewport's horizontal midpoint. Negative if text is wider than vp
-// (normal for this huge font-size).
-function getCenteredX(width) {
-  return (window.innerWidth - width) / 2;
-}
-
-const LEAVE_DURATION = 0.5;
-
-// Small safety buffer at start of enter(). beforeEnter already holds for
-// ~250ms with two ScrollTrigger.refresh passes; this just covers the
-// handoff between the async hook and the first animation tick.
-const ENTER_HOLD = 0.1;
-
-const ENTER_CONTENT_FADE = 0.15;
-const ENTER_SLIDE_DURATION = 0.8;
-
-// Overlay fade-out begins AFTER the text has fully exited — the page swap
-// is guaranteed already settled when the white BG starts disappearing.
-// Negative offset is relative to slide end: 0 = exact slide end.
-const OVERLAY_FADE_AFTER_SLIDE = -0.05;  // tiny overlap so it doesn't feel stuck
-const ENTER_OVERLAY_FADE = 0.35;
-
-const OVERLAY_FADE_IN = 0.15;
-
 export const titleWipe = {
   name: 'title-wipe',
-  sync: false,
 
   leave(data) {
     ensureOverlay();
     const title = getTitle(data);
-    textEl.textContent = title;
+    setupLetters(title);
 
-    // Force a reflow so offsetWidth reads the new text's layout.
-    // eslint-disable-next-line no-unused-expressions
-    textEl.offsetWidth;
-
-    const textWidth = textEl.getBoundingClientRect().width;
-    const centerX = getCenteredX(textWidth);
-
-    log(`title-wipe: leave (title="${title}", width=${Math.round(textWidth)}px, centerX=${Math.round(centerX)}px)`);
+    log(`title-wipe: leave (title="${title}", letters=${title.length})`);
 
     if (typeof gsap === 'undefined') {
       warn('title-wipe: gsap undefined, skipping');
@@ -136,23 +106,50 @@ export const titleWipe = {
     }
 
     if (prefersReducedMotion()) {
-      log('title-wipe: prefers-reduced-motion → fade');
       return gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.2 });
+    }
+
+    const letterEls = [...overlay.querySelectorAll('.' + LETTER_CLASS)];
+    const innerEls = [...overlay.querySelectorAll('.' + INNER_CLASS)];
+
+    // Force a clean baseline so getBoundingClientRect reads natural widths
+    // even when the snippet just painted with default CSS.
+    for (const el of letterEls) gsap.set(el, { clearProps: 'width' });
+    for (const el of innerEls) gsap.set(el, { clearProps: 'transform,opacity' });
+    void overlay.offsetWidth;
+    const widths = letterEls.map((el) => el.getBoundingClientRect().width);
+
+    // Collapse to start state.
+    for (let i = 0; i < letterEls.length; i++) {
+      gsap.set(letterEls[i], { width: 0 });
+      gsap.set(innerEls[i], {
+        scale: 0,
+        opacity: 0,
+        transformOrigin: 'right center',
+      });
     }
 
     const tl = gsap.timeline();
 
-    // Overlay BG fades in at the start (shorter than the slide).
     tl.fromTo(overlay,
       { opacity: 0 },
       { opacity: 1, duration: OVERLAY_FADE_IN, ease: 'power1.out' },
       0);
 
-    // Text slides in from off-screen right, decelerates onto center.
-    tl.fromTo(textEl,
-      { x: '100vw' },
-      { x: centerX, duration: LEAVE_DURATION, ease: 'power2.out' },
-      0);
+    for (let i = 0; i < letterEls.length; i++) {
+      const start = i * STAGGER;
+      tl.to(letterEls[i], {
+        width: widths[i],
+        duration: LETTER_DURATION,
+        ease: LETTER_EASE,
+      }, start);
+      tl.to(innerEls[i], {
+        scale: 1,
+        opacity: 1,
+        duration: LETTER_DURATION,
+        ease: LETTER_EASE,
+      }, start);
+    }
 
     return tl;
   },
@@ -169,50 +166,48 @@ export const titleWipe = {
       return gsap.to(overlay, { opacity: 0, duration: 0.2 });
     }
 
-    const textWidth = textEl.getBoundingClientRect().width;
+    if (!overlay) return Promise.resolve();
+    const innerEls = [...overlay.querySelectorAll('.' + INNER_CLASS)];
     const nextContainer = data?.next?.container;
 
     const tl = gsap.timeline();
 
-    // HOLD: extra buffer before anything starts animating. Overlay stays
-    // opaque and text stays centered during this window — any late IX2 /
-    // layout work finishes fully covered.
     tl.to({}, { duration: ENTER_HOLD }, 0);
 
-    const contentStart = ENTER_HOLD;
-    const slideStart = contentStart + ENTER_CONTENT_FADE;
-    const slideEnd = slideStart + ENTER_SLIDE_DURATION;
-    const overlayStart = slideEnd + OVERLAY_FADE_AFTER_SLIDE;
-
-    // Content fades 0 → 1 (invisible behind opaque overlay, but animated
-    // so the new page is guaranteed at opacity 1 before the reveal).
-    if (nextContainer) {
+    if (nextContainer && nextContainer.nodeType) {
       tl.fromTo(nextContainer,
         { opacity: 0 },
-        { opacity: 1, duration: ENTER_CONTENT_FADE, ease: 'power1.out' },
-        contentStart);
+        { opacity: 1, duration: 0.15, ease: 'power1.out' },
+        ENTER_HOLD);
     }
 
-    // Text slides off-screen left.
-    tl.to(textEl, {
-      x: -textWidth,
-      duration: ENTER_SLIDE_DURATION,
-      ease: 'power2.in',
-    }, slideStart);
+    // Letters fall straight down, left-to-right stagger.
+    const fallStart = ENTER_HOLD + 0.15;
+    for (let i = 0; i < innerEls.length; i++) {
+      tl.to(innerEls[i], {
+        y: '110svh',
+        opacity: 0,
+        duration: FALL_DURATION,
+        ease: FALL_EASE,
+      }, fallStart + i * STAGGER);
+    }
 
-    // Overlay fade-out only begins when the text is ~80% through its
-    // slide — by then the swap is old news and the reveal feels like
-    // the curtain catching up with the already-gone title.
+    // Overlay starts fading once the last letter is well on its way.
+    const lastLetterStart = fallStart + (innerEls.length - 1) * STAGGER;
     tl.to(overlay, {
       opacity: 0,
       duration: ENTER_OVERLAY_FADE,
       ease: 'power1.out',
-    }, overlayStart);
+    }, lastLetterStart + 0.2);
 
-    // Reset text off-screen and clear inline container opacity.
     tl.call(() => {
-      gsap.set(textEl, { x: '100vw' });
-      if (nextContainer) gsap.set(nextContainer, { clearProps: 'opacity' });
+      // Clear letters so the next leave() builds fresh elements with
+      // fresh natural-width measurements.
+      overlay.innerHTML = '';
+      gsap.set(overlay, { clearProps: 'opacity' });
+      if (nextContainer && nextContainer.nodeType) {
+        gsap.set(nextContainer, { clearProps: 'opacity' });
+      }
     });
 
     return tl;
