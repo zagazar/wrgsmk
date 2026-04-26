@@ -167,11 +167,15 @@ async function syncPageScripts(data) {
   );
 
   const missing = expected.filter((src) => !currentSrcs.has(src));
-  if (!missing.length) {
-    log('script sync: nothing to load');
-  } else {
-    log(`script sync: loading ${missing.length} missing script(s)`);
-  }
+  // Per-page Webflow Head Custom Code can be inline (e.g. Webflow.push(...),
+  // GSAP plugin registration, schema.org JSON-LD). Barba never swaps <head>,
+  // so these never run on the second page. Re-fire any inline <script> from
+  // the next page's <head> — Webflow.push and friends are idempotent, and a
+  // duplicate JSON-LD or font loader is harmless.
+  const newHeadInline = [...doc.head.querySelectorAll('script:not([src])')]
+    .map((s) => s.textContent || '')
+    .filter((t) => t.trim());
+  log(`script sync: ${missing.length} missing src + ${newHeadInline.length} inline head script(s)`);
 
   // Tear down old Webflow bindings before adding fresh schunks; otherwise
   // the new schunks' `Webflow.push(...)` callbacks may collide with stale
@@ -197,6 +201,12 @@ async function syncPageScripts(data) {
     const target = WEBFLOW_SCRIPT_RE.test(src) ? document.body : document.head;
     target.appendChild(fresh);
   })));
+
+  for (const code of newHeadInline) {
+    const fresh = document.createElement('script');
+    fresh.textContent = code;
+    document.head.appendChild(fresh);
+  }
 
   // Re-fire the Webflow ready queue so freshly-loaded schunks' setup
   // callbacks bind their IX2 / IX3 interactions to the new container.
