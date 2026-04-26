@@ -87,7 +87,7 @@ function getTitle(data) {
   const path = (data?.next?.url?.path || '').replace(/\/+$/, '');
   const last = path.split('/').filter(Boolean).pop();
   if (last) return last.replace(/-/g, ' ').toUpperCase();
-  return 'WÜRGSAMKEITEN';
+  return 'WUERGSAMKEITEN';
 }
 
 export const titleWipe = {

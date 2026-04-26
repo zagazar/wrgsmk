@@ -55,24 +55,28 @@ const modules = {
 
 const STORAGE_KEY = 'wrgsmk-incoming';
 
-// Paths we own a transition for. Anything else falls through to native
-// nav with no overlay (external links, hash links, mailto, etc.).
-const TAGGED_PATHS = new Set([
-  '/',
-  '/about',
-  '/animation',
-  '/commissional-work',
-  '/fotografie',
-  '/illustration',
-  '/shop',
-  '/auftragsarbeiten/luvcat',
-  '/auftragsarbeiten/kdk-festival-design',
-  '/auftragsarbeiten/grey-men',
-  '/auftragsarbeiten/plakate-drucksachen',
-  '/auftragsarbeiten/fotoshoots',
-  '/auftragsarbeiten/eventfotografie',
-  '/auftragsarbeiten/cover-art',
-  '/auftragsarbeiten/produktinszenierung',
+// Paths we own a transition for, paired with the title that the wipe
+// overlay should show on the way IN. The title must match the
+// destination container's data-barba-title in Webflow — otherwise the
+// snippet on the next page paints letters of one word and the bundle
+// rebuilds to the actual title mid-animation, causing a visible flip.
+// Anything not in this map falls through to native nav with no overlay.
+const TAGGED_PATHS = new Map([
+  ['/', 'WUERGSAMKEITEN'],
+  ['/about', 'ABOUT'],
+  ['/animation', 'ANIMATION'],
+  ['/commissional-work', 'AUFTRAGSARBEITEN'],
+  ['/fotografie', 'FOTOGRAFIE'],
+  ['/illustration', 'ILLUSTRATION'],
+  ['/shop', 'SHOP'],
+  ['/auftragsarbeiten/luvcat', 'LUVCAT'],
+  ['/auftragsarbeiten/kdk-festival-design', 'KDK OPEN AIR DESIGN'],
+  ['/auftragsarbeiten/grey-men', 'TRAYA GREY MEN'],
+  ['/auftragsarbeiten/plakate-drucksachen', 'PLAKATE & DRUCKSACHEN'],
+  ['/auftragsarbeiten/fotoshoots', 'FOTOSHOOTS'],
+  ['/auftragsarbeiten/eventfotografie', 'EVENTFOTOGRAFIE'],
+  ['/auftragsarbeiten/cover-art', 'COVER ART'],
+  ['/auftragsarbeiten/produktinszenierung', 'PRODUKTINSZENIERUNG'],
 ]);
 
 function getCurrentContainer() {
@@ -85,12 +89,18 @@ function getCurrentNamespace() {
 
 function pathToTitle(path) {
   const last = path.replace(/\/+$/, '').split('/').filter(Boolean).pop();
-  return last ? last.replace(/-/g, ' ').toUpperCase() : 'WÜRGSAMKEITEN';
+  return last ? last.replace(/-/g, ' ').toUpperCase() : 'WUERGSAMKEITEN';
+}
+
+function normalizePath(path) {
+  return path.replace(/\/+$/, '') || '/';
 }
 
 function titleForLink(link, url) {
   const explicit = link?.dataset?.barbaTitle;
   if (explicit) return explicit;
+  const mapped = TAGGED_PATHS.get(normalizePath(url.pathname));
+  if (mapped) return mapped;
   return pathToTitle(url.pathname);
 }
 
