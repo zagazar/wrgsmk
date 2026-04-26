@@ -171,10 +171,12 @@ async function syncPageScripts(data) {
   // GSAP plugin registration, schema.org JSON-LD). Barba never swaps <head>,
   // so these never run on the second page. Re-fire any inline <script> from
   // the next page's <head> — Webflow.push and friends are idempotent, and a
-  // duplicate JSON-LD or font loader is harmless.
+  // duplicate JSON-LD or font loader is harmless. Preserve `type` so a
+  // JSON-LD `<script type="application/ld+json">` doesn't get evaluated as
+  // JavaScript on insertion.
   const newHeadInline = [...doc.head.querySelectorAll('script:not([src])')]
-    .map((s) => s.textContent || '')
-    .filter((t) => t.trim());
+    .map((s) => ({ type: s.getAttribute('type') || '', code: s.textContent || '' }))
+    .filter((s) => s.code.trim());
   log(`script sync: ${missing.length} missing src + ${newHeadInline.length} inline head script(s)`);
 
   // Tear down old Webflow bindings before adding fresh schunks; otherwise
@@ -202,8 +204,9 @@ async function syncPageScripts(data) {
     target.appendChild(fresh);
   })));
 
-  for (const code of newHeadInline) {
+  for (const { type, code } of newHeadInline) {
     const fresh = document.createElement('script');
+    if (type) fresh.type = type;
     fresh.textContent = code;
     document.head.appendChild(fresh);
   }
