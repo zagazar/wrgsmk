@@ -1,5 +1,5 @@
 /**
- * Typo Scroll Preview — Pinned commission section with repeating project list.
+ * Typo Scroll Preview — Pinned commission section.
  *
  * Follows the Osmo/Dashly "Big Typo Scroll Preview" pattern: each project has
  * its own fixed-position preview image appended to <body>. Only the active
@@ -18,7 +18,6 @@ export function initTypoScrollPreview() {
   const list = section.querySelector('.wrgsmk-comission_list');
   if (!wrap || !list) return () => {};
 
-  const REPEAT_COUNT = parseInt(section.dataset.comissionRepeats || '3', 10);
   const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
   const oldContainer = section.querySelector('.comission-img-container');
@@ -46,12 +45,6 @@ export function initTypoScrollPreview() {
     previews.push(preview);
   });
 
-  for (let i = 0; i < REPEAT_COUNT - 1; i++) {
-    const clone = list.cloneNode(true);
-    clone.setAttribute('aria-hidden', 'true');
-    wrap.appendChild(clone);
-  }
-
   const allItems = wrap.querySelectorAll('.wrgsmk-comission_item');
 
   section.style.overflow = 'hidden';
@@ -64,7 +57,7 @@ export function initTypoScrollPreview() {
     if (pinSpacer) pinSpacer.style.zIndex = '2';
   });
 
-  const getScrollDistance = () => list.offsetHeight * REPEAT_COUNT - window.innerHeight;
+  const getScrollDistance = () => Math.max(list.offsetHeight - window.innerHeight, 0);
 
   const tween = gsap.fromTo(
     wrap,
