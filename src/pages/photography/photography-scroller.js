@@ -1,12 +1,16 @@
 /**
- * Photography Scroller — Pins the photography section while images scroll through.
+ * Photography Scroller — Pins the photography section, scrubs the photo
+ * column vertically through it as the user scrolls.
  *
- * Uses pinSpacing: false plus a manual marginBottom so the masonry grid
- * directly under .photography-scroller butts up against the section
- * without ScrollTrigger inserting a `.pin-spacer` wrapper between them.
+ * Mechanic: .photography-scroller pins; .photography-scroller__content
+ * is GSAP-tweened from y:0 to y:-(contentHeight - viewportHeight) tied
+ * to scroll progress, so the photos appear to scroll through the
+ * pinned section. pinSpacing: false + manual marginBottom keeps the
+ * masonry grid directly under the section without a .pin-spacer wrapper
+ * between them.
  *
  * Expects globals: gsap, ScrollTrigger
- * Returns: destroy() that kills the ScrollTrigger and detaches listeners.
+ * Returns: destroy() that kills the tween/trigger and detaches listeners.
  */
 export function initPhotographyScroller() {
   if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return () => {};
@@ -22,20 +26,28 @@ export function initPhotographyScroller() {
   };
   updateMargin();
 
-  const trigger = ScrollTrigger.create({
-    trigger: container,
-    start: 'top top',
-    end: () => '+=' + calcSpace(),
-    pin: true,
-    pinSpacing: false,
-    anticipatePin: 1,
-    invalidateOnRefresh: true,
-    onRefresh: updateMargin,
-  });
+  const tween = gsap.fromTo(
+    content,
+    { y: 0 },
+    {
+      y: () => -calcSpace(),
+      ease: 'none',
+      scrollTrigger: {
+        trigger: container,
+        start: 'top top',
+        end: () => '+=' + calcSpace(),
+        pin: true,
+        pinSpacing: false,
+        scrub: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true,
+        onRefresh: updateMargin,
+      },
+    }
+  );
 
-  // ScrollTrigger listens for window resize internally and calls
-  // refresh() — no resize handler of our own. We only force a refresh
-  // when images finish loading, since that changes content height.
+  // ScrollTrigger handles resize internally. Refresh on image load so
+  // the pin distance and scrub end-y reflect the final content height.
   const refresh = () => ScrollTrigger.refresh();
   window.addEventListener('load', refresh);
 
@@ -47,7 +59,8 @@ export function initPhotographyScroller() {
   });
 
   return function destroy() {
-    trigger.kill();
+    tween.scrollTrigger?.kill();
+    tween.kill();
     container.style.marginBottom = '';
     window.removeEventListener('load', refresh);
     imgs.forEach((img) => img.removeEventListener('load', refresh));
