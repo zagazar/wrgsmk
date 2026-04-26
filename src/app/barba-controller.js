@@ -179,9 +179,14 @@ async function syncPageScripts(data) {
     .filter((s) => s.code.trim());
   log(`script sync: ${missing.length} missing src + ${newHeadInline.length} inline head script(s)`);
 
-  // Tear down old Webflow bindings before adding fresh schunks; otherwise
-  // the new schunks' `Webflow.push(...)` callbacks may collide with stale
-  // state on `Webflow.ready()`.
+  // Tear down the old Webflow runtime BEFORE injecting the new page's
+  // scripts. Webflow ships a per-page core (`webflow.<hash>.<page-hash>.js`)
+  // and per-page schunks; old core + new schunk = "t is not a function"
+  // inside o.define because the schunk's module factories were compiled
+  // against a different core instance. Wipe everything Webflow-pattern out
+  // of the DOM and the global, so the new page's scripts boot a clean
+  // runtime. Non-Webflow scripts (jQuery, GSAP, Lenis, CircleType, our
+  // bundle) stay alive — they're shared site-wide and stateful.
   try {
     if (window.Webflow && typeof window.Webflow.destroy === 'function') {
       window.Webflow.destroy();
@@ -191,54 +196,40 @@ async function syncPageScripts(data) {
     console.warn('[WRGSMK:barba] Webflow.destroy() threw:', e);
   }
 
-  await Promise.all(missing.map((src) => new Promise((resolve) => {
+  const oldWfScripts = [...document.querySelectorAll('script[src]')]
+    .filter((s) => WEBFLOW_SCRIPT_RE.test(s.src));
+  for (const s of oldWfScripts) s.remove();
+  try { delete window.Webflow; } catch { window.Webflow = undefined; }
+
+  // After removal, the missing list is "everything in next page's <script
+  // src>" minus "what's still in the DOM" (jQuery, GSAP, etc).
+  const stillLoaded = new Set(
+    [...document.querySelectorAll('script[src]')].map((s) => s.src),
+  );
+  const toLoad = expected.filter((src) => !stillLoaded.has(src));
+
+  // Webflow scripts must execute in their original document order
+  // (schunks register against the core, so the core must boot first).
+  // async=false preserves insertion order while letting the browser
+  // fetch in parallel.
+  await Promise.all(toLoad.map((src) => new Promise((resolve) => {
     const fresh = document.createElement('script');
     fresh.src = src;
     fresh.async = false;
     fresh.onload = resolve;
     fresh.onerror = resolve;
-    // Webflow scripts go to <body> to match where Webflow itself emits
-    // them; everything else (CircleType, page Custom Code) goes to <head>
-    // since that's where Webflow's per-page Head Code lives.
     const target = WEBFLOW_SCRIPT_RE.test(src) ? document.body : document.head;
     target.appendChild(fresh);
   })));
 
+  // Inline <head> scripts (Webflow per-page Custom Code, schema JSON-LD)
+  // run AFTER the core has booted so any Webflow.push(...) inside them
+  // fires immediately against the live core.
   for (const { type, code } of newHeadInline) {
     const fresh = document.createElement('script');
     if (type) fresh.type = type;
     fresh.textContent = code;
     document.head.appendChild(fresh);
-  }
-
-  // Re-fire the Webflow ready queue so freshly-loaded schunks' setup
-  // callbacks bind their IX2 / IX3 interactions to the new container.
-  try {
-    if (window.Webflow && typeof window.Webflow.ready === 'function') {
-      window.Webflow.ready();
-    }
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] Webflow.ready() threw:', e);
-  }
-  try {
-    const ix2 = window.Webflow?.require?.('ix2');
-    if (ix2 && typeof ix2.init === 'function') ix2.init();
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] ix2.init() threw:', e);
-  }
-  try {
-    const ix3 = window.Webflow?.require?.('ix3');
-    // Destroy old IX3 bindings BEFORE re-binding. Without destroy(), ready()
-    // is a no-op for already-bound interaction IDs and the new container's
-    // data-w-id elements never get hover/scroll-reveal handlers attached
-    // (visible as: hovers do nothing, IX3 scroll reveals stuck at start).
-    if (ix3 && typeof ix3.destroy === 'function') ix3.destroy();
-    if (ix3 && typeof ix3.ready === 'function') ix3.ready();
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] ix3 rebind threw:', e);
   }
 
   log('Webflow rebind complete');
