@@ -147,31 +147,23 @@ function playEnter() {
     container.dataset.barbaTitle = title;
   }
 
+  // Drop the CSS-driven incoming state on a pre-painted overlay (if any)
+  // so leave()'s GSAP fromTo can own the inline transform without
+  // fighting CSS specificity.
   const preExisting = document.getElementById('wrgsmk-wipe');
-  if (preExisting) {
-    // Inline snippet pre-painted the overlay before first frame, so there
-    // was never a flash of bare page. Hand off to the existing animation
-    // pipeline by seeding GSAP's transform to the visually-current
-    // centered position, then play enter() to slide it off.
-    const text = preExisting.querySelector('.wrgsmk-wipe__text');
-    if (text) {
-      const w = text.getBoundingClientRect().width;
-      const centerX = (window.innerWidth - w) / 2;
-      gsap.set(text, { x: centerX });
-    }
-    // Drop the CSS-driven incoming state so inline GSAP transforms own
-    // the rendering from here on.
-    preExisting.classList.remove('is-incoming');
-    titleWipe.enter(data);
-    return;
-  }
+  if (preExisting) preExisting.classList.remove('is-incoming');
 
-  // Snippet not installed — fall back to staging via leave-then-fast-
-  // forward. There will be a brief flash of bare page before this runs.
+  // Stage via leave(): adopts a pre-painted overlay or creates one,
+  // sets the title text, and builds the slide-in timeline. Jump that
+  // timeline to its end-state so we don't see the slide-in. This also
+  // initializes title-wipe's module-level `overlay`/`textEl` refs that
+  // enter() needs.
   const stageTl = titleWipe.leave(data);
   if (stageTl && typeof stageTl.totalProgress === 'function') {
     stageTl.totalProgress(1).pause();
   }
+
+  // Now play the reveal: text slides off-screen left, overlay fades out.
   titleWipe.enter(data);
 }
 
