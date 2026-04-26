@@ -128,32 +128,50 @@ function playEnter() {
   }
   if (!title) title = pathToTitle(location.pathname);
 
+  if (typeof gsap === 'undefined') {
+    // No GSAP loaded yet — best we can do is hide a pre-painted overlay
+    // so the page is visible.
+    document.getElementById('wrgsmk-wipe')?.remove();
+    return;
+  }
+
   const container = getCurrentContainer();
   const data = {
     next: {
       namespace: getCurrentNamespace(),
       url: { path: location.pathname, href: location.href },
-      // Synthesize a container-shaped object so titleWipe.leave can read
-      // dataset.barbaTitle for the staging frame even when the live
-      // container has no data-barba-title attribute.
       container: container || { dataset: { barbaTitle: title } },
     },
   };
-
-  // Stage: run leave() to create the overlay, set the text, and stage
-  // the centered/opaque end-state. Then jump the timeline to its end so
-  // we don't see the slide-in.
-  if (typeof gsap === 'undefined') return;
-  // Inject a barbaTitle into the container's dataset so getTitle() picks it up.
   if (container && !container.dataset.barbaTitle) {
     container.dataset.barbaTitle = title;
   }
+
+  const preExisting = document.getElementById('wrgsmk-wipe');
+  if (preExisting) {
+    // Inline snippet pre-painted the overlay before first frame, so there
+    // was never a flash of bare page. Hand off to the existing animation
+    // pipeline by seeding GSAP's transform to the visually-current
+    // centered position, then play enter() to slide it off.
+    const text = preExisting.querySelector('.wrgsmk-wipe__text');
+    if (text) {
+      const w = text.getBoundingClientRect().width;
+      const centerX = (window.innerWidth - w) / 2;
+      gsap.set(text, { x: centerX });
+    }
+    // Drop the CSS-driven incoming state so inline GSAP transforms own
+    // the rendering from here on.
+    preExisting.classList.remove('is-incoming');
+    titleWipe.enter(data);
+    return;
+  }
+
+  // Snippet not installed — fall back to staging via leave-then-fast-
+  // forward. There will be a brief flash of bare page before this runs.
   const stageTl = titleWipe.leave(data);
   if (stageTl && typeof stageTl.totalProgress === 'function') {
     stageTl.totalProgress(1).pause();
   }
-
-  // Now reveal: slide the title off-screen and fade overlay out.
   titleWipe.enter(data);
 }
 

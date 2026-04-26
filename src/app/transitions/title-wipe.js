@@ -40,6 +40,22 @@ let textEl = null;
 function ensureOverlay() {
   if (overlay && document.body.contains(overlay)) return;
 
+  // Inline pre-paint snippet (in Webflow's site-wide head Custom Code)
+  // may have already inserted #wrgsmk-wipe so the overlay is on screen
+  // from the very first paint, before this deferred bundle even loads.
+  // If so, adopt it instead of creating a duplicate.
+  const existing = document.getElementById(OVERLAY_ID);
+  if (existing) {
+    overlay = existing;
+    textEl = existing.querySelector('.' + TEXT_CLASS) || existing.querySelector('span');
+    if (!textEl) {
+      textEl = document.createElement('span');
+      textEl.className = `wrgsmk-comission_title ${TEXT_CLASS}`;
+      overlay.appendChild(textEl);
+    }
+    return;
+  }
+
   overlay = document.createElement('div');
   overlay.id = OVERLAY_ID;
 

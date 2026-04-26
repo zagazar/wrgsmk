@@ -35,6 +35,14 @@ const CSS = `
 #wrgsmk-wipe .wrgsmk-wipe__text:hover {
   letter-spacing: inherit !important;
 }
+
+/* Pre-paint state used by the inline snippet in Webflow's site-wide head
+   Custom Code: overlay opaque, title centered horizontally via calc. The
+   bundle adopts this overlay on load and animates the slide-out. */
+#wrgsmk-wipe.is-incoming { opacity: 1; }
+#wrgsmk-wipe.is-incoming .wrgsmk-wipe__text {
+  transform: translateX(calc(50vw - 50%));
+}
 `;
 
 export function injectWipeStyles() {
