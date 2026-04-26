@@ -1,15 +1,27 @@
 /**
- * Barba Controller — wires page transitions, views, and global hooks.
+ * Transition Controller — title-wipe over native navigation.
  *
- * - Per-namespace modules (init/destroy) dispatched via a registry.
- * - Global hooks handle ScrollTrigger cleanup, scroll reset, Webflow/IX2 reinit.
- * - Transitions are empty in Phase 2. Title-wipe is added in Phase 3.
+ * SPA-style container swapping fought too hard with Webflow's per-page
+ * IX runtime (per-page cores, per-page schunks, IIFE closures with
+ * lifelong state). Instead, we keep the cinematic title-wipe overlay
+ * and just do real page reloads behind it: native nav guarantees that
+ * Webflow boots cleanly on every page exactly the way it does on a
+ * hard reload, so all hover/scroll/IX animations work without manual
+ * rebind dances.
  *
- * Debug mode: activate with ?debug=1, localStorage 'wrgsmk-debug', or
- * window.WRGSMK_DEBUG=true. See src/app/debug.js for details.
+ * Flow:
+ * - On link click to a tagged path: animate title-wipe leave (orange
+ *   title slides in from the right onto a white overlay), then
+ *   `window.location.href = url`.
+ * - Before navigating away, write the destination's title into
+ *   sessionStorage so the next page's pre-paint setup can stage the
+ *   overlay in its "centered" end-state.
+ * - On the new page load: if the stash is present, paint the overlay
+ *   immediately (text centered, full opacity), then play title-wipe
+ *   enter to slide it off.
+ * - Page-module init() runs once on natural load, same as a hard
+ *   reload. No destroy/rebind needed.
  */
-import barba from '@barba/core';
-
 import * as homeModule from '../pages/home/index.js';
 import * as illustrationModule from '../pages/illustration/index.js';
 import * as shopModule from '../pages/shop/index.js';
@@ -17,15 +29,11 @@ import * as photographyModule from '../pages/photography/index.js';
 import * as auftragsarbeitenModule from '../pages/auftragsarbeiten/index.js';
 import * as commissionDetailModule from '../pages/commission-detail/index.js';
 
-// Pages without bespoke per-page scripts (e.g. About, Animation) share this
-// no-op namespace module so the registry lookup succeeds cleanly and
-// barba-controller doesn't warn about a missing module.
 const passthroughModule = { init() {}, destroy() {} };
 
 import { titleWipe } from './transitions/title-wipe.js';
 import { injectWipeStyles } from './transitions/title-wipe.css.js';
 import { isDebug, log, warn, group, groupEnd, time, timeEnd } from './debug.js';
-import { refreshParallax } from '../core/parallax.js';
 
 const modules = {
   home: homeModule,
@@ -33,7 +41,6 @@ const modules = {
   shop: shopModule,
   photography: photographyModule,
   auftragsarbeiten: auftragsarbeitenModule,
-  // Commission subpages all share the same pinned-image + scroll-swap behavior.
   luvcat: commissionDetailModule,
   'kdk-festival-design': commissionDetailModule,
   'grey-men': commissionDetailModule,
@@ -45,6 +52,47 @@ const modules = {
   about: passthroughModule,
   animation: passthroughModule,
 };
+
+const STORAGE_KEY = 'wrgsmk-incoming';
+
+// Paths we own a transition for. Anything else falls through to native
+// nav with no overlay (external links, hash links, mailto, etc.).
+const TAGGED_PATHS = new Set([
+  '/',
+  '/about',
+  '/animation',
+  '/commissional-work',
+  '/fotografie',
+  '/illustration',
+  '/shop',
+  '/auftragsarbeiten/luvcat',
+  '/auftragsarbeiten/kdk-festival-design',
+  '/auftragsarbeiten/grey-men',
+  '/auftragsarbeiten/plakate-drucksachen',
+  '/auftragsarbeiten/fotoshoots',
+  '/auftragsarbeiten/eventfotografie',
+  '/auftragsarbeiten/cover-art',
+  '/auftragsarbeiten/produktinszenierung',
+]);
+
+function getCurrentContainer() {
+  return document.querySelector('[data-barba="container"]');
+}
+
+function getCurrentNamespace() {
+  return getCurrentContainer()?.dataset?.barbaNamespace || null;
+}
+
+function pathToTitle(path) {
+  const last = path.replace(/\/+$/, '').split('/').filter(Boolean).pop();
+  return last ? last.replace(/-/g, ' ').toUpperCase() : 'WÜRGSAMKEITEN';
+}
+
+function titleForLink(link, url) {
+  const explicit = link?.dataset?.barbaTitle;
+  if (explicit) return explicit;
+  return pathToTitle(url.pathname);
+}
 
 function runInit(namespace) {
   const m = modules[namespace];
@@ -63,184 +111,118 @@ function runInit(namespace) {
     timeEnd(`init(${namespace})`);
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.error('[WRGSMK:barba] init failed for', namespace, e);
+    console.error('[WRGSMK:transition] init failed for', namespace, e);
   }
 }
 
-function runDestroy(namespace) {
-  const m = modules[namespace];
-  if (!m) {
-    warn(`no module registered for namespace "${namespace}" (destroy)`);
-    return;
-  }
-  if (typeof m.destroy !== 'function') {
-    log(`module "${namespace}" has no destroy() — skipping`);
-    return;
-  }
-  log(`destroy() → ${namespace}`);
+function playEnter() {
+  const stash = sessionStorage.getItem(STORAGE_KEY);
+  if (!stash) return;
+  sessionStorage.removeItem(STORAGE_KEY);
+
+  let title = '';
   try {
-    m.destroy();
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error('[WRGSMK:barba] destroy failed for', namespace, e);
+    title = JSON.parse(stash).title || '';
+  } catch {
+    title = stash;
   }
+  if (!title) title = pathToTitle(location.pathname);
+
+  const container = getCurrentContainer();
+  const data = {
+    next: {
+      namespace: getCurrentNamespace(),
+      url: { path: location.pathname, href: location.href },
+      // Synthesize a container-shaped object so titleWipe.leave can read
+      // dataset.barbaTitle for the staging frame even when the live
+      // container has no data-barba-title attribute.
+      container: container || { dataset: { barbaTitle: title } },
+    },
+  };
+
+  // Stage: run leave() to create the overlay, set the text, and stage
+  // the centered/opaque end-state. Then jump the timeline to its end so
+  // we don't see the slide-in.
+  if (typeof gsap === 'undefined') return;
+  // Inject a barbaTitle into the container's dataset so getTitle() picks it up.
+  if (container && !container.dataset.barbaTitle) {
+    container.dataset.barbaTitle = title;
+  }
+  const stageTl = titleWipe.leave(data);
+  if (stageTl && typeof stageTl.totalProgress === 'function') {
+    stageTl.totalProgress(1).pause();
+  }
+
+  // Now reveal: slide the title off-screen and fade overlay out.
+  titleWipe.enter(data);
 }
 
-function killAllScrollTriggers() {
-  if (typeof ScrollTrigger !== 'undefined') {
-    const count = ScrollTrigger.getAll().length;
-    if (count) log(`killing ${count} ScrollTrigger(s)`);
-    ScrollTrigger.getAll().forEach((st) => st.kill());
-  }
-}
+function navigate(url, link) {
+  const title = titleForLink(link, url);
+  log(`navigate → ${url.pathname} (title="${title}")`);
 
-function resetScroll() {
-  log('resetScroll()');
-  window.scrollTo(0, 0);
-  if (window.wrgsmkLenis && typeof window.wrgsmkLenis.scrollTo === 'function') {
-    window.wrgsmkLenis.scrollTo(0, { immediate: true });
-  }
-}
-
-// Webflow stores per-page interaction IDs on <html data-wf-page="...">.
-// During SPA nav only the barba container swaps, so <html> still carries
-// the OLD page's ID and IX2 would re-bind the wrong interactions. Copy
-// the new ID in from the fetched document before re-init.
-function syncWebflowPageId(data) {
+  // Stash for the incoming page's enter animation.
   try {
-    const html = data?.next?.html;
-    if (!html) return;
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const incomingId = doc.documentElement.getAttribute('data-wf-page');
-    if (!incomingId) {
-      warn('no data-wf-page on incoming document');
-      return;
-    }
-    const currentId = document.documentElement.getAttribute('data-wf-page');
-    if (incomingId !== currentId) {
-      document.documentElement.setAttribute('data-wf-page', incomingId);
-      log(`data-wf-page: ${currentId} → ${incomingId}`);
-    }
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] syncWebflowPageId failed:', e);
-  }
-}
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ title, ts: Date.now() }));
+  } catch {}
 
-// Sync the page's script tags to whatever the next page actually needs.
-//
-// Webflow compiles page-specific IX bundles (`webflow.schunk.<hash>.js`)
-// and lets users add per-page Custom Code (e.g. CircleType in <head> of
-// the home page only). Barba never swaps <head>, and `<script>` tags
-// inserted via innerHTML aren't executed by the browser — so any script
-// that the next page expects but the current entry page never loaded
-// stays missing, taking with it `window.CircleType`, the new page's IX
-// compile output, etc.
-//
-// Strategy: parse `data.next.html`, diff the script-src list against
-// what's currently in the DOM, and inject any missing scripts via
-// createElement so the browser actually executes them. Then destroy +
-// ready Webflow's runtime so the freshly-loaded schunks register their
-// IX setup callbacks against the swapped-in container.
-//
-// We deliberately do NOT remove old page-specific scripts — they're
-// inert once their setup is unbound, and removing them risks tripping
-// modules that hold internal references.
-const WEBFLOW_SCRIPT_RE = /webflow.*\.js/i;
+  const data = {
+    next: {
+      namespace: null,
+      url: { path: url.pathname, href: url.href },
+      container: { dataset: { barbaTitle: title } },
+    },
+  };
 
-async function syncPageScripts(data) {
-  const html = data?.next?.html;
-  if (!html) {
-    warn('no data.next.html — skipping script sync');
+  if (typeof gsap === 'undefined') {
+    window.location.href = url.href;
     return;
   }
 
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const tl = titleWipe.leave(data);
+  if (tl && typeof tl.eventCallback === 'function') {
+    tl.eventCallback('onComplete', () => { window.location.href = url.href; });
+  } else {
+    Promise.resolve(tl).then(() => { window.location.href = url.href; });
+  }
+}
 
-  const expected = [...doc.querySelectorAll('script[src]')]
-    .map((s) => s.src)
-    .filter(Boolean);
-  const currentSrcs = new Set(
-    [...document.querySelectorAll('script[src]')].map((s) => s.src),
-  );
+function handleClick(e) {
+  if (e.defaultPrevented) return;
+  if (e.button !== undefined && e.button !== 0) return;
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 
-  const missing = expected.filter((src) => !currentSrcs.has(src));
-  // Per-page Webflow Head Custom Code can be inline (e.g. Webflow.push(...),
-  // GSAP plugin registration, schema.org JSON-LD). Barba never swaps <head>,
-  // so these never run on the second page. Re-fire any inline <script> from
-  // the next page's <head> — Webflow.push and friends are idempotent, and a
-  // duplicate JSON-LD or font loader is harmless. Preserve `type` so a
-  // JSON-LD `<script type="application/ld+json">` doesn't get evaluated as
-  // JavaScript on insertion.
-  const newHeadInline = [...doc.head.querySelectorAll('script:not([src])')]
-    .map((s) => ({ type: s.getAttribute('type') || '', code: s.textContent || '' }))
-    .filter((s) => s.code.trim());
-  log(`script sync: ${missing.length} missing src + ${newHeadInline.length} inline head script(s)`);
+  const link = e.target.closest('a[href]');
+  if (!link) return;
+  if (link.target === '_blank') return;
+  if (link.hasAttribute('download')) return;
 
-  // Tear down the old Webflow runtime BEFORE injecting the new page's
-  // scripts. Webflow ships a per-page core (`webflow.<hash>.<page-hash>.js`)
-  // and per-page schunks; old core + new schunk = "t is not a function"
-  // inside o.define because the schunk's module factories were compiled
-  // against a different core instance. Wipe everything Webflow-pattern out
-  // of the DOM and the global, so the new page's scripts boot a clean
-  // runtime. Non-Webflow scripts (jQuery, GSAP, Lenis, CircleType, our
-  // bundle) stay alive — they're shared site-wide and stateful.
+  const href = link.getAttribute('href');
+  if (!href) return;
+  if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+
+  let url;
   try {
-    if (window.Webflow && typeof window.Webflow.destroy === 'function') {
-      window.Webflow.destroy();
-    }
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] Webflow.destroy() threw:', e);
+    url = new URL(href, location.origin);
+  } catch {
+    return;
   }
+  if (url.origin !== location.origin) return;
 
-  const oldWfScripts = [...document.querySelectorAll('script[src]')]
-    .filter((s) => WEBFLOW_SCRIPT_RE.test(s.src));
-  for (const s of oldWfScripts) s.remove();
-  try { delete window.Webflow; } catch { window.Webflow = undefined; }
+  const path = url.pathname.replace(/\/$/, '') || '/';
+  if (!TAGGED_PATHS.has(path)) return;
 
-  // After removal, the missing list is "everything in next page's <script
-  // src>" minus "what's still in the DOM" (jQuery, GSAP, etc).
-  const stillLoaded = new Set(
-    [...document.querySelectorAll('script[src]')].map((s) => s.src),
-  );
-  const toLoad = expected.filter((src) => !stillLoaded.has(src));
+  // Don't intercept same-page clicks.
+  if (path === (location.pathname.replace(/\/$/, '') || '/') && url.hash === location.hash) return;
 
-  // Webflow scripts must execute in their original document order
-  // (schunks register against the core, so the core must boot first).
-  // async=false preserves insertion order while letting the browser
-  // fetch in parallel.
-  await Promise.all(toLoad.map((src) => new Promise((resolve) => {
-    const fresh = document.createElement('script');
-    fresh.src = src;
-    fresh.async = false;
-    fresh.onload = resolve;
-    fresh.onerror = resolve;
-    const target = WEBFLOW_SCRIPT_RE.test(src) ? document.body : document.head;
-    target.appendChild(fresh);
-  })));
-
-  // Inline <head> scripts (Webflow per-page Custom Code, schema JSON-LD)
-  // run AFTER the core has booted so any Webflow.push(...) inside them
-  // fires immediately against the live core.
-  for (const { type, code } of newHeadInline) {
-    const fresh = document.createElement('script');
-    if (type) fresh.type = type;
-    fresh.textContent = code;
-    document.head.appendChild(fresh);
-  }
-
-  log('Webflow rebind complete');
+  e.preventDefault();
+  navigate(url, link);
 }
 
 export function initBarba() {
   if (typeof window === 'undefined') return;
 
-  const debug = isDebug();
-
-  if (debug) {
+  if (isDebug()) {
     log('debug mode ENABLED');
     log('registered namespaces:', Object.keys(modules));
   }
@@ -249,143 +231,25 @@ export function initBarba() {
     history.scrollRestoration = 'manual';
   }
 
-  // Ensure <body> is the Barba wrapper without per-page Webflow config.
-  if (!document.body.hasAttribute('data-barba')) {
-    document.body.setAttribute('data-barba', 'wrapper');
-    log('added data-barba="wrapper" to <body>');
-  }
-
   injectWipeStyles();
 
-  barba.hooks.once((data) => {
-    group(`once → ${data.next.namespace}`);
-    log('container:', data.next.container);
-    log('url:', data.next.url);
-    runInit(data.next.namespace);
-    groupEnd();
-  });
+  // Page-module init for whatever page we just loaded into. Mirrors
+  // what Barba's hooks.once used to do. Skipped for non-tagged paths
+  // (e.g. landing on /impressum directly — there's no module for it).
+  const ns = getCurrentNamespace();
+  if (ns) runInit(ns);
 
-  barba.hooks.beforeLeave((data) => {
-    group(`beforeLeave: ${data.current.namespace} → ${data.next.namespace}`);
-    log('from:', data.current.url);
-    log('to:', data.next.url);
-    runDestroy(data.current.namespace);
-    killAllScrollTriggers();
-    groupEnd();
-  });
+  // If the stash flag is present, this load is the back end of a
+  // title-wipe transition. Run the enter animation to slide the
+  // overlay off and reveal the page.
+  if (sessionStorage.getItem(STORAGE_KEY)) {
+    // Wait one frame so the page has actually painted before the
+    // overlay is staged on top of it (avoids a flash of unstyled
+    // content under the overlay during paint).
+    requestAnimationFrame(playEnter);
+  }
 
-  barba.hooks.leave(() => {
-    log('leave (transition start)');
-  });
+  document.addEventListener('click', handleClick, false);
 
-  barba.hooks.beforeEnter(async (data) => {
-    group(`beforeEnter → ${data.next.namespace}`);
-    // Hide the OLD container immediately. Barba keeps it in the DOM until
-    // after afterEnter, so without this it would flash through as soon as
-    // the overlay begins fading. Overlay is still fully opaque here.
-    if (data.current && data.current.container) {
-      data.current.container.style.display = 'none';
-      log('hid previous container');
-    }
-    // Everything happens invisibly behind the opaque title-wipe overlay so
-    // the new page is fully prepared before the reveal starts.
-    resetScroll();
-    syncWebflowPageId(data);
-    await syncPageScripts(data);
-    refreshParallax();
-    runInit(data.next.namespace);
-
-    // First refresh captures triggers that init'd synchronously.
-    if (typeof ScrollTrigger !== 'undefined') {
-      log('ScrollTrigger.refresh() #1');
-      ScrollTrigger.refresh();
-    }
-
-    // Hard settle window: gives Webflow CMS dyn-lists, lazy images, and
-    // ScrollTrigger pin-spacers enough time to finish their layout passes.
-    // Anything shorter and the pin-spacer height/padding changes leak out
-    // AFTER the overlay has faded, causing a visible shift.
-    log('awaiting 250ms settle window');
-    await new Promise((resolve) => setTimeout(resolve, 250));
-
-    // Second refresh catches triggers that set up async (e.g. after
-    // images/CMS finished rendering inside the new container).
-    if (typeof ScrollTrigger !== 'undefined') {
-      log('ScrollTrigger.refresh() #2');
-      ScrollTrigger.refresh();
-    }
-
-    // Final paint tick so the refresh result is committed before enter().
-    await new Promise((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(resolve));
-    });
-    log('paint settled');
-    groupEnd();
-  });
-
-  barba.hooks.enter((data) => {
-    log(`enter → ${data.next.namespace}`);
-  });
-
-  barba.hooks.afterEnter((data) => {
-    // Intentionally no ScrollTrigger.refresh() here — running it after the
-    // overlay has faded causes visible layout shifts in pinned sections.
-    // All refresh work happens during beforeEnter while the overlay covers.
-    log(`afterEnter → ${data.next.namespace}`);
-  });
-
-  barba.init({
-    debug: debug,
-    timeout: 5000,
-    // Barba only handles navigation to pages that carry a Barba container.
-    // Until every Webflow page template has been tagged, we keep a allowlist
-    // of paths that are known-tagged; any other target falls through to a
-    // native full-page navigation (and hash links stay native too).
-    prevent: ({ el }) => {
-      if (!el) return false;
-      const href = el.getAttribute('href');
-      if (!href) return false;
-      if (href.startsWith('#')) {
-        log(`prevent: hash link "${href}" → native`);
-        return true;
-      }
-      try {
-        const url = new URL(href, window.location.origin);
-        const path = url.pathname.replace(/\/$/, '') || '/';
-        const prevented = !TAGGED_PATHS.has(path);
-        if (prevented) {
-          log(`prevent: "${path}" not in allowlist → native nav`);
-        } else {
-          log(`barba will handle: "${path}"`);
-        }
-        return prevented;
-      } catch {
-        return false;
-      }
-    },
-    transitions: [titleWipe],
-    views: [],
-  });
-
-  log('barba.init complete');
+  log('transition controller ready');
 }
-
-// Keep in sync with the pages that have data-barba="container" in Webflow.
-// Remove this allowlist entirely once every page template is tagged.
-const TAGGED_PATHS = new Set([
-  '/',
-  '/about',
-  '/animation',
-  '/commissional-work',
-  '/fotografie',
-  '/illustration',
-  '/shop',
-  '/auftragsarbeiten/luvcat',
-  '/auftragsarbeiten/kdk-festival-design',
-  '/auftragsarbeiten/grey-men',
-  '/auftragsarbeiten/plakate-drucksachen',
-  '/auftragsarbeiten/fotoshoots',
-  '/auftragsarbeiten/eventfotografie',
-  '/auftragsarbeiten/cover-art',
-  '/auftragsarbeiten/produktinszenierung',
-]);
