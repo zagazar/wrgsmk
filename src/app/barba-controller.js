@@ -230,10 +230,15 @@ async function syncPageScripts(data) {
   }
   try {
     const ix3 = window.Webflow?.require?.('ix3');
+    // Destroy old IX3 bindings BEFORE re-binding. Without destroy(), ready()
+    // is a no-op for already-bound interaction IDs and the new container's
+    // data-w-id elements never get hover/scroll-reveal handlers attached
+    // (visible as: hovers do nothing, IX3 scroll reveals stuck at start).
+    if (ix3 && typeof ix3.destroy === 'function') ix3.destroy();
     if (ix3 && typeof ix3.ready === 'function') ix3.ready();
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.warn('[WRGSMK:barba] ix3.ready() threw:', e);
+    console.warn('[WRGSMK:barba] ix3 rebind threw:', e);
   }
 
   log('Webflow rebind complete');
